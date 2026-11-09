@@ -4,7 +4,7 @@
 
 A camera-based Android app that coaches home bodyweight exercise form in real time. It watches you through the phone's front camera, counts **only correct reps**, and speaks short corrections like "Go lower" or "Keep your hips up" when your form slips. Everything runs on the phone, so it works offline and no video ever leaves the device.
 
-Built by a 3-person team in 3 weeks, following the **Version 2 (Focused)** roadmap.
+Built by a 3-person team in 3 weeks, following the **Version 2 (Focused)** roadmap. Working title during planning: *AI Workout Coach*.
 
 ## Scope (Version 2)
 
