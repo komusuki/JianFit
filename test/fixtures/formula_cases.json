@@ -1,0 +1,31 @@
+{
+  "joint_angle": [
+    {"a": [0, 0],    "b": [0, 100], "c": [100, 100],  "expected": 90.0},
+    {"a": [0, 0],    "b": [50, 0],  "c": [100, 0],    "expected": 180.0},
+    {"a": [100, 0],  "b": [0, 0],   "c": [100, 100],  "expected": 45.0},
+    {"a": [-100, 0], "b": [0, 0],   "c": [100, -100], "expected": 135.0},
+    {"a": [10, 10],  "b": [10, 10], "c": [50, 50],    "expected": "nan"}
+  ],
+  "lean": [
+    {"shoulder": [100, 0],        "hip": [100, 100], "expected": 0.0},
+    {"shoulder": [200, 100],      "hip": [100, 100], "expected": 90.0},
+    {"shoulder": [150, 13.39746], "hip": [100, 100], "expected": 30.0}
+  ],
+  "hip_sag": [
+    {"shoulder": [0, 100], "hip": [100, 110], "end": [200, 100], "expected": 11.42},
+    {"shoulder": [0, 100], "hip": [100, 90],  "end": [200, 100], "expected": -11.42}
+  ],
+  "head_drop": [
+    {"ear": [50, 120], "shoulder": [100, 100], "hip": [300, 100], "expected": 21.80, "dropping": true}
+  ],
+  "align": [
+    {"p": [130, 0], "q": [100, 0], "shoulder": [100, 0], "hip": [100, 100], "facing": 1,  "expected": 0.3},
+    {"p": [130, 0], "q": [100, 0], "shoulder": [100, 0], "hip": [100, 100], "facing": -1, "expected": -0.3}
+  ],
+  "heel_lift": [
+    {"base_heel_y": 500, "heel_y": 480, "L": 100, "expected": 0.2}
+  ],
+  "smoothing": [
+    {"n": 5, "inputs": [10, 20, 30, 40, 50, 60], "expected": [10, 15, 20, 25, 30, 40]}
+  ]
+}

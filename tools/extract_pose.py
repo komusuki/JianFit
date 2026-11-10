@@ -1,9 +1,13 @@
 """Replay tool, step 1: turn exercise videos into CSV files of body points.
 
 For every frame of a video, MediaPipe finds the 33 body points and this script
-writes one CSV row: frame, time_sec, then x, y, z and visibility for each point.
-x and y are in PIXELS (like ML Kit on the phone), so angles are not stretched.
-Frames where no body is found are kept as blank rows so the timeline stays intact.
+writes one CSV row in the replay CSV format of the Shared Formula Document:
+    frame, t_ms, width, height, lm0_x, lm0_y, lm0_c, ..., lm32_x, lm32_y, lm32_c
+x and y are in PIXELS (like ML Kit on the phone), c is MediaPipe's visibility,
+t_ms is the time since the start of the video. Depth (z) is not saved because
+the formulas ignore it. Landmark numbers: 0 = nose ... 32 = right foot index
+(see LANDMARKS below). Frames where no body is found keep empty landmark values,
+so the timeline stays intact.
 
 Usage (from the tools folder, with .venv active):
     python extract_pose.py "<video file or folder of videos>"
@@ -58,9 +62,9 @@ def ensure_model():
 
 
 def csv_header():
-    cols = ["frame", "time_sec"]
-    for name in LANDMARKS:
-        cols += [f"{name}_x", f"{name}_y", f"{name}_z", f"{name}_vis"]
+    cols = ["frame", "t_ms", "width", "height"]
+    for i in range(len(LANDMARKS)):
+        cols += [f"lm{i}_x", f"lm{i}_y", f"lm{i}_c"]
     return cols
 
 
@@ -134,13 +138,13 @@ def process_video(video_path, csv_path):
             image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             result = landmarker.detect_for_video(image, int(frame_idx * 1000 / fps))
 
-            row = [frame_idx, round(frame_idx / fps, 4)]
+            row = [frame_idx, round(frame_idx * 1000 / fps), w, h]
             if result.pose_landmarks:
                 found.append(True)
                 points = result.pose_landmarks[0]
                 for p in points:
-                    vis = "" if p.visibility is None else round(p.visibility, 3)
-                    row += [round(p.x * w, 2), round(p.y * h, 2), round(p.z * w, 2), vis]
+                    vis = "" if p.visibility is None else round(p.visibility, 4)
+                    row += [round(p.x * w, 3), round(p.y * h, 3), vis]
                 for j in MAIN_JOINTS:
                     v = points[j].visibility or 0.0
                     vis_sum[j] += v
@@ -151,7 +155,7 @@ def process_video(video_path, csv_path):
                     check_saved = True
             else:
                 found.append(False)
-                row += [""] * (len(LANDMARKS) * 4)
+                row += [""] * (len(LANDMARKS) * 3)
             writer.writerow(row)
             frame_idx += 1
             if frame_idx % 30 == 0 and total:
@@ -216,7 +220,8 @@ def write_summary(s, path):
     ]
     for name, (avg, usable) in s["joints"].items():
         flag = "   LOW" if usable < LOW_USABLE else ""
-        lines.append(f"  {name:<18} avg {avg:.2f}   usable {usable:3.0f}%{flag}")
+        label = f"{name} (lm{LANDMARKS.index(name)})"
+        lines.append(f"  {label:<24} avg {avg:.2f}   usable {usable:3.0f}%{flag}")
     lines += ["", "Files", f"  {s['csv']:<45} all 33 body points, one row per frame"]
     if s["check"]:
         lines.append(f"  {s['check']:<45} one frame with the skeleton drawn on it")
