@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'camera_test_screen.dart';
 import 'exercise_list_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
