@@ -4,6 +4,9 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../engine/exercise_config.dart';
+import '../engine/measurement_layer.dart';
+import '../engine/rep_counter.dart';
 import '../services/pose_service.dart';
 import '../widgets/skeleton_painter.dart';
 
@@ -17,15 +20,22 @@ class CameraTestScreen extends StatefulWidget {
 class _CameraTestScreenState extends State<CameraTestScreen> {
   final _poseService = PoseService();
   final _fpsWatch = Stopwatch();
+  final _clock = Stopwatch(); // t_ms for the engine
+  final _layer = MeasurementLayer(squatConfig);
+  final _counter = RepCounter.forExercise(squatConfig);
   CameraController? _controller;
   CameraDescription? _camera;
   Pose? _pose;
   InputImageRotation? _rotation;
   Size? _imageSize;
+  FrameResult? _frame;
+  bool _isPerson = false;
+  RepResult? _lastRep;
   String _status = 'Starting camera...';
   int _frames = 0;
   int _cameraFrames = 0;
   CameraImage? _pending;
+  int _pendingMs = 0;
   bool _processing = false;
   double _fps = 0;
 
@@ -55,37 +65,73 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
     _controller = controller;
     await WakelockPlus.enable();
     _fpsWatch.start();
+    _clock.start();
     await controller.startImageStream(_onFrame);
     if (mounted) setState(() => _status = '');
   }
 
   void _onFrame(CameraImage image) {
     _cameraFrames++;
+    final tMs = _clock.elapsedMilliseconds; // time the frame arrived
     if (_processing) {
       _pending = image; // keep only the newest frame
+      _pendingMs = tMs;
       return;
     }
-    _processLoop(image);
+    _processLoop(image, tMs);
   }
 
-  Future<void> _processLoop(CameraImage first) async {
+  Future<void> _processLoop(CameraImage first, int firstMs) async {
     _processing = true;
     CameraImage? image = first;
+    var tMs = firstMs;
     while (image != null && mounted) {
       _pending = null;
-      await _handle(image);
+      await _handle(image, tMs);
       image = _pending;
+      tMs = _pendingMs;
     }
     _processing = false;
   }
 
-  Future<void> _handle(CameraImage image) async {
+  Future<void> _handle(CameraImage image, int tMs) async {
     final controller = _controller;
     final camera = _camera;
     if (controller == null || camera == null) return;
     final orientation = controller.value.deviceOrientation;
     final poses = await _poseService.process(image, camera, orientation);
     if (poses == null || !mounted) return;
+    final pose = poses.isEmpty ? null : poses.first;
+
+    // Engine: measurement layer, then rep counter.
+    final wasReady = _layer.isReady;
+    final points = PoseService.toPoints(pose);
+    final frame = _layer.process(points, tMs);
+    if (!wasReady && _layer.isReady) {
+      debugPrint(
+        'SETUP done: side=${_layer.side!.name} '
+        'facing=${_layer.facing} baseline=${_layer.baseline}',
+      );
+    }
+    if (frame.status == FrameStatus.paused) {
+      debugPrint('PAUSED: no judgeable frame for 2 s, setup starts again');
+      _counter.reset(keepCount: true);
+    }
+    if (frame.status == FrameStatus.judged) {
+      final main = frame.values[squatConfig.mainMeasurement];
+      if (main != null) {
+        final rep = _counter.update(main, frame.values, tMs);
+        if (rep != null) {
+          _lastRep = rep;
+          debugPrint(
+            'REP ${_counter.count}: '
+            'deepest=${rep.deepest.toStringAsFixed(1)} '
+            'duration=${rep.durationMs} ms',
+          );
+        }
+      }
+    }
+
     _frames++;
     if (_fpsWatch.elapsedMilliseconds >= 5000) {
       final secs = _fpsWatch.elapsedMilliseconds / 1000;
@@ -101,11 +147,47 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
       ms.clear();
       _fpsWatch.reset();
     }
+
     setState(() {
-      _pose = poses.isEmpty ? null : poses.first;
+      _pose = pose;
+      _frame = frame;
       _rotation = _poseService.rotationFor(camera, orientation);
       _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+      _isPerson = _layer.hasPerson(points);
     });
+  }
+
+  void _resetSet() {
+    setState(() {
+      _layer.reset();
+      _counter.reset();
+      _lastRep = null;
+    });
+  }
+
+  String _infoText() {
+    final lines = [
+      'FPS: ${_fps.toStringAsFixed(1)}   Pose: ${_isPerson ? 'found' : (_pose == null ? 'none' : 'weak')}',
+    ];
+    final f = _frame;
+    if (f != null) {
+      final knee = f.values['knee_angle'];
+      lines
+        ..add('Status: ${f.status.name}   Side: ${_layer.side?.name ?? '-'}')
+        ..add(
+          'Knee: ${knee == null ? '-' : knee.toStringAsFixed(0)}   '
+          'Stage: ${_counter.stage.name}',
+        )
+        ..add('Reps: ${_counter.count}');
+      final r = _lastRep;
+      if (r != null) {
+        lines.add(
+          'Last rep: deepest ${r.deepest.toStringAsFixed(0)}, '
+          '${(r.durationMs / 1000).toStringAsFixed(1)} s',
+        );
+      }
+    }
+    return lines.join('\n');
   }
 
   @override
@@ -122,7 +204,8 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
     if (c == null || !c.value.isInitialized) {
       return Scaffold(body: Center(child: Text(_status)));
     }
-    final canDraw = _pose != null && _rotation != null && _imageSize != null;
+    final canDraw =
+        _isPerson && _pose != null && _rotation != null && _imageSize != null;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -149,9 +232,17 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
               color: Colors.black54,
               padding: const EdgeInsets.all(8),
               child: Text(
-                'FPS: ${_fps.toStringAsFixed(1)}   Pose: ${_pose == null ? 'none' : 'found'}',
+                _infoText(),
                 style: const TextStyle(color: Colors.white, fontSize: 16),
               ),
+            ),
+          ),
+          Positioned(
+            bottom: 32,
+            right: 16,
+            child: ElevatedButton(
+              onPressed: _resetSet,
+              child: const Text('Reset set'),
             ),
           ),
         ],

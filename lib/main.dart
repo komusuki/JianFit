@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'screens/camera_test_screen.dart';
+
 void main() {
   runApp(const MyApp());
 }
