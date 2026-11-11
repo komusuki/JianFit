@@ -7,9 +7,11 @@ Follows the order of operations of the Shared Formula Document for every frame:
   4. smoothing: moving average of the last SMOOTH_N judgeable values
   5. rep counting and form checks come in replay step 4
 
-A recorded video has no countdown, so the first BASELINE_MS (1000 ms) with a person in
-the picture stands in for it: side, facing and the standing baseline are chosen there,
-and judging starts after it. Start every recording with the person standing still.
+A recorded video has no countdown, so the first unbroken BASELINE_MS (1000 ms) of setup
+frames stands in for it (document v0.3). A setup frame has every required joint at
+MIN_CONFIDENCE or more on at least one side (lunges: both legs too); a frame that fails
+restarts the window. Side, facing and the standing baseline are chosen there, and
+judging starts after it. Start every recording with the person standing still.
 
 Usage (from the tools folder, with .venv active):
     python measurements.py "<videos\\csv folder>"          # every video folder inside it
@@ -97,14 +99,32 @@ def confident(p, *joints):
     return all(p[j][2] >= f.MIN_CONFIDENCE for j in joints)
 
 
+def is_setup_frame(p, ex):
+    """A setup frame has every required joint at MIN_CONFIDENCE or more on at least one
+    side, plus the joints required on both sides (both legs for lunges). Document v0.3."""
+    if p is None:
+        return False
+    both_ok = confident(p, *[j[k] for j in ex["both"] for k in (LEFT, RIGHT)])
+    side_ok = any(confident(p, *[j[s] for j in ex["side"]]) for s in (LEFT, RIGHT))
+    return both_ok and side_ok
+
+
 def setup(frames, ex):
     """Stand-in for the countdown: choose side, facing and baseline from the first
-    BASELINE_MS with a person in the picture."""
+    unbroken BASELINE_MS of setup frames. A frame that fails restarts the window."""
     warnings = []
-    first = next((t for _, t, p in frames if p is not None), None)
-    if first is None:
-        return None
-    window = [p for _, t, p in frames if p is not None and t < first + f.BASELINE_MS]
+    run = []                                    # (t_ms, points) of the current unbroken run
+    for _, t, p in frames:
+        if not is_setup_frame(p, ex):
+            run = []
+            continue
+        if run and t - run[0][0] >= f.BASELINE_MS:
+            break                               # window complete; this frame is judged
+        run.append((t, p))
+    else:
+        return None                             # never 1000 ms of setup frames in a row
+    first = run[0][0]
+    window = [p for _, p in run]
 
     # Side: higher mean confidence of the required joints. Ties: left.
     def mean_conf(s):
@@ -140,7 +160,7 @@ def setup(frames, ex):
             warnings.append("Ankles are above the shoulders: the video looks rotated or upside down.")
 
     return dict(side=side, facing=facing, base=base, y_floor=y_floor,
-                setup_end=first + f.BASELINE_MS, warnings=warnings)
+                setup_start=first, setup_end=first + f.BASELINE_MS, warnings=warnings)
 
 
 def compute(ex, p, s, facing, L, base, y_floor):
@@ -185,7 +205,8 @@ def process(pose_csv, out_csv, ex_name):
     frames = read_pose_csv(pose_csv)
     st = setup(frames, ex)
     if st is None:
-        print("    No person found in any frame, skipped.")
+        print(f"    Setup never completed: no unbroken {f.BASELINE_MS} ms where the required joints were")
+        print("    visible (confidence 0.5+). Skipped. Check the joint table in the _summary.txt.")
         return None
     side, facing = st["side"], st["facing"]
     required = [j[side] for j in ex["side"]] + [j[k] for j in ex["both"] for k in (LEFT, RIGHT)]
@@ -257,7 +278,8 @@ def print_report(ex_name, res):
     ex, st, c = EXERCISES[ex_name], res["st"], res["counts"]
     face = "+1 (toward the right of the image)" if st["facing"] > 0 else "-1 (toward the left)"
     print(f"    Exercise:    {ex_name}")
-    print(f"    Setup:       first {f.BASELINE_MS} ms, side {'L' if st['side'] == LEFT else 'R'}, facing {face}")
+    print(f"    Setup:       {st['setup_start'] / 1000:.2f}-{st['setup_end'] / 1000:.2f} s, "
+          f"side {'L' if st['side'] == LEFT else 'R'}, facing {face}")
     pct = 100 * c["ok"] / res["judged"] if res["judged"] else 0
     print(f"    Judgeable:   {c['ok']} of {res['judged']} frames after setup ({pct:.0f}%)  |  "
           f"low confidence {c['low_confidence']}, no person {c['no_person']}, too far {c['too_far']}")
