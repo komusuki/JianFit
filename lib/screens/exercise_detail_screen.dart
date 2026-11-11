@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/exercise_info.dart';
 import '../models/strictness.dart';
+import '../services/settings_service.dart';
 
 class ExerciseDetailScreen extends StatefulWidget {
   const ExerciseDetailScreen({super.key, required this.exercise});
@@ -19,6 +20,14 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
   Strictness _strictness = Strictness.standard;
 
   bool get _isHold => widget.exercise.type == ExerciseType.hold;
+
+  @override
+  void initState() {
+    super.initState();
+    SettingsService.loadStrictness().then((s) {
+      if (mounted) setState(() => _strictness = s);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
