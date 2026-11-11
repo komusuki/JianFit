@@ -2,6 +2,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
+import '../engine/geometry.dart';
+
 class PoseService {
   final PoseDetector _detector = PoseDetector(
     options: PoseDetectorOptions(
@@ -19,6 +21,17 @@ class PoseService {
     DeviceOrientation.landscapeRight: 270,
   };
 
+  /// ML Kit pose -> {landmark index: point} for the engine.
+  /// No pose gives an empty map, which the engine treats as "no person".
+  static Map<int, Pt> toPoints(Pose? pose) {
+    if (pose == null) return const <int, Pt>{};
+    return {
+      for (final e in pose.landmarks.entries)
+        e.key.index: Pt(e.value.x, e.value.y, e.value.likelihood),
+    };
+  }
+
+  /// Rotation ML Kit needs to see the person upright.
   InputImageRotation? rotationFor(
     CameraDescription camera,
     DeviceOrientation o,
@@ -32,6 +45,7 @@ class PoseService {
     return InputImageRotationValue.fromRawValue(deg);
   }
 
+  /// Returns null when busy with another frame or when the frame cannot be converted.
   Future<List<Pose>?> process(
     CameraImage image,
     CameraDescription camera,
