@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/exercise_info.dart';
+import 'exercise_detail_screen.dart';
 
 class ExerciseListScreen extends StatelessWidget {
   const ExerciseListScreen({super.key});
@@ -34,8 +35,9 @@ class ExerciseListScreen extends StatelessWidget {
                   '${e.level}, ${e.type == ExerciseType.hold ? 'hold' : 'reps'}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${e.name} detail is not built yet')),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ExerciseDetailScreen(exercise: e)),
                 ),
               ),
           ],
