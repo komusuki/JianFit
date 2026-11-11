@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'camera_test_screen.dart';
+import 'exercise_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -38,7 +39,10 @@ class HomeScreen extends StatelessWidget {
             icon: Icons.fitness_center,
             title: 'Single Exercise',
             subtitle: 'Pick one exercise and train it',
-            onTap: () => _notBuiltYet(context, 'Single Exercise'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ExerciseListScreen()),
+            ),
           ),
           _HomeCard(
             icon: Icons.list_alt,
