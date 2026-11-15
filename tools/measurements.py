@@ -7,11 +7,14 @@ Follows the order of operations of the Shared Formula Document for every frame:
   4. smoothing: moving average of the last SMOOTH_N judgeable values
   5. rep counting and form checks come in replay step 4
 
-A recorded video has no countdown, so the first unbroken BASELINE_MS (1000 ms) of setup
-frames stands in for it (document v0.3). A setup frame has every required joint at
-MIN_CONFIDENCE or more on at least one side (lunges: both legs too); a frame that fails
-restarts the window. Side, facing and the standing baseline are chosen there, and
-judging starts after it. Start every recording with the person standing still.
+This file mirrors lib/engine/measurement_layer.dart (formula document v0.4). Setup uses
+the first BASELINE_MS (1000 ms) of frames that have a person in view (every required
+joint at MIN_CONFIDENCE or more on at least one side; lunges: both legs too). A frame
+that fails restarts the window. Side, facing, the standing baseline and the setup thigh and shin
+lengths are chosen there, and judging starts after it. Frames with impossible values
+(a joint angle under PLAUSIBLE_MIN_ANGLE_DEG, or a thigh or shin far from its setup
+length) are unjudgeable. LOW_CONF_PAUSE_MS without a judgeable frame pauses (status
+"paused"), and setup is done again. Start every recording with the person standing still.
 
 Usage (from the tools folder, with .venv active):
     python measurements.py "<videos\\csv folder>"          # every video folder inside it
@@ -51,7 +54,7 @@ _LUNGE = dict(pose="standing", side=[SHOULDER, HIP], both=[HIP, KNEE, ANKLE],
               measurements=["front_knee_angle", "back_knee_height", "front_knee_over_ankle",
                             "torso_lean"])
 EXERCISES = {
-    "bodyweight-squat": dict(pose="standing", side=[SHOULDER, HIP, KNEE, ANKLE, HEEL], both=[],
+    "bodyweight-squat": dict(pose="standing", side=[SHOULDER, HIP, KNEE, ANKLE], both=[],
                              baseline=True, main="knee_angle", direction="dip",
                              measurements=["knee_angle", "hip_angle", "torso_lean", "heel_lift"]),
     "jump-squat": dict(pose="standing", side=[SHOULDER, HIP, KNEE, ANKLE], both=[ANKLE],
@@ -109,65 +112,76 @@ def is_setup_frame(p, ex):
     return both_ok and side_ok
 
 
-def setup(frames, ex):
-    """Stand-in for the countdown: choose side, facing and baseline from the first
-    unbroken BASELINE_MS of setup frames. A frame that fails restarts the window."""
+SETUP_BENT_DEG = 150   # tool-only warning: main angle this low during setup means "not standing"
+
+
+def leg_segments(ex, side):
+    """Thigh (hip-knee) and shin (knee-ankle) of every leg whose joints are required."""
+    segs = []
+    for s in (LEFT, RIGHT):
+        req = {j[s] for j in ex["both"]} | ({j[s] for j in ex["side"]} if s == side else set())
+        if HIP[s] in req and KNEE[s] in req:
+            segs.append((HIP[s], KNEE[s]))
+        if KNEE[s] in req and ANKLE[s] in req:
+            segs.append((KNEE[s], ANKLE[s]))
+    return segs
+
+
+def finish_setup(window, ex):
+    """Side, facing and baseline from the setup frames (measurement_layer.dart _finishSetup)."""
+    # Side (v0.4): the side whose required joints pass the confidence check in more setup
+    # frames; if equal, the higher mean confidence; if still equal, left.
+    def pass_rate(side):
+        return statistics.fmean(confident(p, *[j[side] for j in ex["side"]]) for p in window)
+
+    def mean_confidence(side):
+        return statistics.fmean(statistics.fmean(p[j[side]][2] for j in ex["side"]) for p in window)
+    key = {sd: (pass_rate(sd), mean_confidence(sd)) for sd in (LEFT, RIGHT)}
+    side = RIGHT if key[RIGHT] > key[LEFT] else LEFT
+
+    # Facing: standing = toes vs heel, floor = shoulder vs hip (median over the window).
+    a, b = (FOOT_INDEX[side], HEEL[side]) if ex["pose"] == "standing" else (SHOULDER[side], HIP[side])
+    diffs = [p[a][0] - p[b][0] for p in window]
+    facing = 1 if not diffs or statistics.median(diffs) >= 0 else -1
+
+    # Baseline: median y of each ankle and heel; floor = mean heel baseline.
+    base = {j: statistics.median(p[j][1] for p in window)
+            for j in (ANKLE[LEFT], ANKLE[RIGHT], HEEL[LEFT], HEEL[RIGHT])}
+    y_floor = (base[HEEL[LEFT]] + base[HEEL[RIGHT]]) / 2
+    # Setup lengths of the thighs and shins, for the plausibility check (v0.4).
+    lengths = {(a, b): statistics.median(f.segment_length(p[a], p[b]) for p in window)
+               for a, b in leg_segments(ex, side)}
+
     warnings = []
-    run = []                                    # (t_ms, points) of the current unbroken run
-    for _, t, p in frames:
-        if not is_setup_frame(p, ex):
-            run = []
-            continue
-        if run and t - run[0][0] >= f.BASELINE_MS:
-            break                               # window complete; this frame is judged
-        run.append((t, p))
-    else:
-        return None                             # never 1000 ms of setup frames in a row
-    first = run[0][0]
-    window = [p for _, p in run]
-
-    # Side: higher mean confidence of the required joints. Ties: left.
-    def mean_conf(s):
-        return statistics.fmean(p[j[s]][2] for p in window for j in ex["side"])
-    side = LEFT if mean_conf(LEFT) >= mean_conf(RIGHT) else RIGHT
-
-    # Facing: toes vs heel when standing, shoulder vs hip on the floor (median over the window).
-    if ex["pose"] == "standing":
-        a, b = FOOT_INDEX[side], HEEL[side]
-    else:
-        a, b = SHOULDER[side], HIP[side]
-    diffs = [p[a][0] - p[b][0] for p in window if confident(p, a, b)]
-    if diffs:
-        facing = f.sign(statistics.median(diffs))
-    else:
-        facing = 1
-        warnings.append("Facing could not be found during setup (joints not visible); assumed +1.")
-
-    # Standing baseline: median y of each ankle and each heel.
-    base = {}
-    if ex["baseline"]:
-        for j in (ANKLE[LEFT], ANKLE[RIGHT], HEEL[LEFT], HEEL[RIGHT]):
-            ys = [p[j][1] for p in window if p[j][2] >= f.MIN_CONFIDENCE]
-            base[j] = statistics.median(ys) if ys else f.NAN
-        if any(math.isnan(v) for v in base.values()):
-            warnings.append("An ankle or heel was not visible during setup; heights may be blank.")
-    y_floor = (base.get(HEEL[LEFT], f.NAN) + base.get(HEEL[RIGHT], f.NAN)) / 2
-
     # Day 2 check from the document: standing upright, ankle y must be below shoulder y.
-    if ex["pose"] == "standing":
-        rows = [p for p in window if confident(p, ANKLE[side], SHOULDER[side])]
-        if rows and statistics.median(p[ANKLE[side]][1] - p[SHOULDER[side]][1] for p in rows) < 0:
-            warnings.append("Ankles are above the shoulders: the video looks rotated or upside down.")
-
-    return dict(side=side, facing=facing, base=base, y_floor=y_floor,
-                setup_start=first, setup_end=first + f.BASELINE_MS, warnings=warnings)
+    if ex["pose"] == "standing" and statistics.median(
+            p[ANKLE[side]][1] - p[SHOULDER[side]][1] for p in window) < 0:
+        warnings.append("Ankles are above the shoulders: the video looks rotated or upside down.")
+    return side, facing, base, y_floor, lengths, warnings
 
 
-def compute(ex, p, s, facing, L, base, y_floor):
-    """Raw measurements for one judgeable frame. Returns (measurements, extra columns)."""
+def judgeable(p, ex, side, lengths):
+    """(status, L): status is ok, no_person, low_confidence, too_far or implausible
+    (measurement_layer.dart _judgeableBodyLength, plus the v0.4 plausibility check)."""
+    if p is None:
+        return "no_person", None
+    required = [j[side] for j in ex["side"]] + [j[k] for j in ex["both"] for k in (LEFT, RIGHT)]
+    if not confident(p, *required):
+        return "low_confidence", None
+    L = f.body_length(p[SHOULDER[side]], p[HIP[side]])
+    if L < f.MIN_BODY_LENGTH_PX:
+        return "too_far", None
+    for (a, b), setup_len in lengths.items():
+        if not f.plausible_length(f.segment_length(p[a], p[b]), setup_len):
+            return "implausible", None
+    return "ok", L
+
+
+def compute(ex, p, s, facing, L, base, y_floor, prev_front=None):
+    """Raw measurements for one frame. Returns (measurements, extra columns, front leg)."""
     def P(joint):
         return p[joint[s]]                      # the chosen side
-    names, m, extra = ex["measurements"], {}, {}
+    names, m, extra, front = ex["measurements"], {}, {}, None
     if "knee_angle" in names:
         m["knee_angle"] = f.joint_angle(P(HIP), P(KNEE), P(ANKLE))
     if "hip_angle" in names:
@@ -175,7 +189,10 @@ def compute(ex, p, s, facing, L, base, y_floor):
     if "torso_lean" in names:
         m["torso_lean"] = f.lean(P(SHOULDER), P(HIP))
     if "heel_lift" in names:
-        m["heel_lift"] = f.heel_lift(base[HEEL[s]], P(HEEL)[1], L)
+        # Heel is not a required joint, so skip this measurement when unsure.
+        heel = P(HEEL)
+        m["heel_lift"] = (f.NAN if heel[2] < f.MIN_CONFIDENCE or HEEL[s] not in base
+                          else f.heel_lift(base[HEEL[s]], heel[1], L))
     if "jump_rise_left" in names:
         m["jump_rise_left"] = f.jump_rise(base[ANKLE[LEFT]], p[ANKLE[LEFT]][1], L)
         m["jump_rise_right"] = f.jump_rise(base[ANKLE[RIGHT]], p[ANKLE[RIGHT]][1], L)
@@ -189,100 +206,146 @@ def compute(ex, p, s, facing, L, base, y_floor):
     if "elbow_under_shoulder" in names:
         m["elbow_under_shoulder"] = abs(f.align(P(ELBOW), P(SHOULDER), facing, L))
     if "front_knee_angle" in names:
-        # Front leg chosen on every judgeable frame (document v0.2). Crediting each rep to
-        # the leg in front at its Bottom stage happens with the rep counter (replay step 4).
-        front = LEFT if f.left_is_front(p[ANKLE[LEFT]], p[ANKLE[RIGHT]], facing, L) else RIGHT
+        # Front leg on every judgeable frame, with the v0.4 margin. Crediting each rep to the
+        # leg in front at its Bottom stage happens with the rep counter (replay step 4).
+        front = f.front_leg(p[ANKLE[LEFT]], p[ANKLE[RIGHT]], facing, L, prev_front)
         back = RIGHT if front == LEFT else LEFT
         m["front_knee_angle"] = f.joint_angle(p[HIP[front]], p[KNEE[front]], p[ANKLE[front]])
         m["back_knee_height"] = f.back_knee_height(y_floor, p[KNEE[back]][1], L)
         m["front_knee_over_ankle"] = f.align(p[KNEE[front]], p[ANKLE[front]], facing, L)
         extra["front_leg"] = "L" if front == LEFT else "R"
-    return m, extra
+    return m, extra, front
+
+
+def setup_bent_angle(window, ex, side, facing, base, y_floor):
+    """Tool-only warning (not in the app): median main angle during setup, if it shows the
+    person was bent (dip exercises only). None when the setup looks upright."""
+    if ex["direction"] != "dip":
+        return None
+    values = []
+    for p in window:
+        L = f.body_length(p[SHOULDER[side]], p[HIP[side]])
+        if L >= f.MIN_BODY_LENGTH_PX:
+            v = compute(ex, p, side, facing, L, base, y_floor)[0].get(ex["main"], f.NAN)
+            if not math.isnan(v):
+                values.append(v)
+    if values and statistics.median(values) < SETUP_BENT_DEG:
+        return statistics.median(values)
+    return None
+
+
+def implausible_angle(raw):
+    """v0.4: any joint angle below PLAUSIBLE_MIN_ANGLE_DEG makes the whole frame unjudgeable."""
+    return any(n.endswith("_angle") and not math.isnan(v) and v < f.PLAUSIBLE_MIN_ANGLE_DEG
+               for n, v in raw.items())
 
 
 def process(pose_csv, out_csv, ex_name):
+    """Run every frame through setup, the confidence check, measurements and smoothing,
+    in the same order as MeasurementLayer.process in the Dart engine."""
     ex = EXERCISES[ex_name]
+    names = ex["measurements"]
     frames = read_pose_csv(pose_csv)
-    st = setup(frames, ex)
-    if st is None:
-        print(f"    Setup never completed: no unbroken {f.BASELINE_MS} ms where the required joints were")
-        print("    visible (confidence 0.5+). Skipped. Check the joint table in the _summary.txt.")
-        return None
-    side, facing = st["side"], st["facing"]
-    required = [j[side] for j in ex["side"]] + [j[k] for j in ex["both"] for k in (LEFT, RIGHT)]
     smoothers = {n: f.Smoother(f.SMOOTH_N_JUMP if n.startswith("jump_rise") else f.SMOOTH_N)
-                 for n in ex["measurements"]}
+                 for n in names}
     extras = {"front_knee_angle": "front_leg", "head_drop": "head_dropping"}
-    extra_cols = [extras[n] for n in ex["measurements"] if n in extras]
     cols = ["frame", "t_ms", "exercise", "status", "side", "facing", "L"]
-    for n in ex["measurements"]:
+    for n in names:
         cols += [n, f"{n}_raw"]
-    cols += extra_cols
+    cols += [extras[n] for n in names if n in extras]
 
-    counts = {"ok": 0, "low_confidence": 0, "no_person": 0, "too_far": 0}
-    smoothed_values = {n: [] for n in ex["measurements"]}
-    last_ok_t = None
-    bad_since = None
-    long_gaps = []
+    side = None                       # None until setup finishes (MeasurementLayer.side)
+    facing, base, y_floor, lengths, prev_front = 1, {}, f.NAN, {}, None
+    setup_frames, setup_start, last_judged = [], None, None
+    setups, pauses, warnings = [], [], []
+    counts = {"ok": 0, "low_confidence": 0, "no_person": 0, "too_far": 0, "implausible": 0}
+    smoothed_values = {n: [] for n in names}
     rows = []
+
     for frame, t, p in frames:
-        row = {"frame": frame, "t_ms": t, "exercise": ex_name,
-               "side": "L" if side == LEFT else "R", "facing": facing}
-        if t < st["setup_end"]:
+        row = {"frame": frame, "t_ms": t, "exercise": ex_name}
+        if side is None:                                   # setup window
             row["status"] = "setup"
+            if not is_setup_frame(p, ex):
+                setup_frames, setup_start = [], None
+            else:
+                setup_start = t if setup_start is None else setup_start
+                setup_frames.append(p)
+                if t - setup_start >= f.BASELINE_MS:
+                    side, facing, base, y_floor, lengths, w = finish_setup(setup_frames, ex)
+                    warnings += [m for m in w if m not in warnings]
+                    bent = setup_bent_angle(setup_frames, ex, side, facing, base, y_floor)
+                    if bent is not None:
+                        warnings.append(f"Setup at {setup_start / 1000:.2f}-{t / 1000:.2f} s happened while "
+                                        f"bent ({ex['main']} about {bent:.0f} degrees), so heights may be "
+                                        f"off. Reshoot with 2 s of standing still.")
+                    setups.append((setup_start, t, side, facing))
+                    last_judged, setup_frames, prev_front = t, [], None
             rows.append(row)
             continue
-        if p is None:
-            status = "no_person"
-        elif not confident(p, *required):
-            status = "low_confidence"
-        else:
-            L = f.body_length(p[SHOULDER[side]], p[HIP[side]])
-            status = "too_far" if L < f.MIN_BODY_LENGTH_PX else "ok"
-        row["status"] = status
-        counts[status] += 1
 
+        row["side"], row["facing"] = ("L" if side == LEFT else "R"), facing
+        status, L = judgeable(p, ex, side, lengths)
+        raw = extra = front = None
+        if status == "ok":
+            raw, extra, front = compute(ex, p, side, facing, L, base, y_floor, prev_front)
+            if implausible_angle(raw):
+                status = "implausible"
         if status != "ok":
-            bad_since = t if bad_since is None else bad_since
+            if t - last_judged >= f.LOW_CONF_PAUSE_MS:     # automatic pause: setup again
+                status = "paused"
+                pauses.append(t)
+                side, facing, base, y_floor, lengths, prev_front = None, 1, {}, f.NAN, {}, None
+                setup_frames, setup_start, last_judged = [], None, None
+                for sm in smoothers.values():
+                    sm.reset()
+            else:
+                counts[status] += 1
+            row["status"] = status
             rows.append(row)
             continue
-        if bad_since is not None and t - bad_since >= f.LOW_CONF_PAUSE_MS:
-            long_gaps.append((bad_since, t))
-        bad_since = None
-        if last_ok_t is not None and t - last_ok_t > f.SMOOTH_RESET_MS:
-            for s in smoothers.values():
-                s.reset()
-        last_ok_t = t
 
-        row["L"] = L
-        raw, extra = compute(ex, p, side, facing, L, st["base"], st["y_floor"])
+        if t - last_judged > f.SMOOTH_RESET_MS:
+            for sm in smoothers.values():
+                sm.reset()
+        row["status"], row["L"] = "ok", L
+        counts["ok"] += 1
+        prev_front = front
         for n, v in raw.items():
             row[f"{n}_raw"] = v
-            if not math.isnan(v):
+            if not math.isnan(v):                           # unjudgeable for this one only
                 row[n] = smoothers[n].push(v)
                 smoothed_values[n].append(row[n])
         row.update(extra)
+        last_judged = t
         rows.append(row)
 
+    if not setups:
+        print(f"    Setup never completed: no {f.BASELINE_MS} ms in a row with")
+        print("    the required joints visible (confidence 0.5+). Skipped. Check the _summary.txt and the video.")
+        return None
     with open(out_csv, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols)
         w.writeheader()
         for r in rows:
             w.writerow({k: (round(v, 6) if isinstance(v, float) and not math.isnan(v) else
                             ("" if isinstance(v, float) else v)) for k, v in r.items()})
-    return dict(st=st, counts=counts, smoothed=smoothed_values, long_gaps=long_gaps,
-                judged=len(frames) - sum(1 for r in rows if r["status"] == "setup"))
+    judged = sum(1 for r in rows if r["status"] not in ("setup", "paused"))
+    return dict(setups=setups, pauses=pauses, warnings=warnings, counts=counts,
+                smoothed=smoothed_values, judged=judged)
 
 
 def print_report(ex_name, res):
-    ex, st, c = EXERCISES[ex_name], res["st"], res["counts"]
-    face = "+1 (toward the right of the image)" if st["facing"] > 0 else "-1 (toward the left)"
+    ex, c = EXERCISES[ex_name], res["counts"]
     print(f"    Exercise:    {ex_name}")
-    print(f"    Setup:       {st['setup_start'] / 1000:.2f}-{st['setup_end'] / 1000:.2f} s, "
-          f"side {'L' if st['side'] == LEFT else 'R'}, facing {face}")
+    for i, (a, b, side, facing) in enumerate(res["setups"]):
+        face = "+1 (toward the right of the image)" if facing > 0 else "-1 (toward the left)"
+        label = "Setup:      " if i == 0 else "Setup again:"
+        print(f"    {label} {a / 1000:.2f}-{b / 1000:.2f} s, side {'L' if side == LEFT else 'R'}, facing {face}")
     pct = 100 * c["ok"] / res["judged"] if res["judged"] else 0
     print(f"    Judgeable:   {c['ok']} of {res['judged']} frames after setup ({pct:.0f}%)  |  "
-          f"low confidence {c['low_confidence']}, no person {c['no_person']}, too far {c['too_far']}")
+          f"low confidence {c['low_confidence']}, no person {c['no_person']}, too far {c['too_far']}, "
+          f"implausible {c['implausible']}")
     for n in ex["measurements"]:
         vals = res["smoothed"][n]
         rng = f"{min(vals):.2f} to {max(vals):.2f}" if vals else "no values"
@@ -290,10 +353,10 @@ def print_report(ex_name, res):
         if n == ex["main"]:
             note = "   <- main, dips each rep" if ex["direction"] == "dip" else "   <- main, rises each rep"
         print(f"    {n:<22} {rng}{note}")
-    for a, b in res["long_gaps"]:
-        print(f"    Warning: no judgeable frame from {a / 1000:.2f} to {b / 1000:.2f} s. The app would "
-              f"pause and redo setup here; this tool does not, so check the values after it.")
-    for wmsg in st["warnings"]:
+    for t in res["pauses"]:
+        print(f"    Paused at {t / 1000:.2f} s: no judgeable frame for {f.LOW_CONF_PAUSE_MS} ms, "
+              f"so setup was done again (as the app would).")
+    for wmsg in res["warnings"]:
         print(f"    Warning: {wmsg}")
     if pct < 70:
         print("    Warning: under 70% of frames could be judged. Check the joint table in the _summary.txt.")

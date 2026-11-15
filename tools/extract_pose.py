@@ -13,6 +13,10 @@ Usage (from the tools folder, with .venv active):
     python extract_pose.py "<video file or folder of videos>"
     python extract_pose.py "<folder>" --out "<csv folder>"   # choose where CSVs go
     python extract_pose.py "<folder>" --overwrite            # redo existing CSVs
+    python extract_pose.py "<folder>" --fps 0                # keep every frame (default: 15 fps)
+
+By default only about 15 frames per second are kept (REPLAY_FPS), because the phone
+processes about 15; the others are skipped without being decoded.
 
 Each video gets its own folder inside the CSV folder, for example:
     videos\\csv\\bodyweight-squat_S01_front_01\\bodyweight-squat_S01_front_01.csv
@@ -37,6 +41,7 @@ from mediapipe.tasks.python import BaseOptions, vision
 MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
              "pose_landmarker_full/float16/latest/pose_landmarker_full.task")
 MODEL_PATH = Path(__file__).parent / "models" / "pose_landmarker_full.task"
+REPLAY_FPS = 15   # formula document v0.4: keep about the frames the phone would process
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v"}
 
 # The 33 body points in MediaPipe's order (ML Kit uses the same order).
@@ -86,14 +91,14 @@ MIN_VIS = 0.5     # below this the app does not judge a joint (PDF Part 4)
 LOW_USABLE = 80   # a joint usable in fewer than this % of frames is marked LOW
 
 
-def missing_ranges(found, fps):
-    """Group the frames with no body into (start_sec, end_sec, frame_count) runs."""
+def missing_ranges(found, times_ms):
+    """Group the processed frames with no body into (start_sec, end_sec, frame_count) runs."""
     ranges, start = [], None
     for i, ok in enumerate(found + [True]):
         if not ok and start is None:
             start = i
         elif ok and start is not None:
-            ranges.append((start / fps, (i - 1) / fps, i - start))
+            ranges.append((times_ms[start] / 1000, times_ms[i - 1] / 1000, i - start))
             start = None
     return ranges
 
@@ -102,8 +107,9 @@ def fmt_range(r):
     return f"{r[0]:.2f}-{r[1]:.2f} s ({r[2]} frames)"
 
 
-def process_video(video_path, csv_path):
-    """Write the CSV and check image. Returns a stats dict, or None if the video can't be opened."""
+def process_video(video_path, csv_path, target_fps=REPLAY_FPS):
+    """Write the CSV and check image. Returns a stats dict, or None if the video can't be opened.
+    Keeps about target_fps frames per second (0 = every frame); skipped frames are not decoded."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return None
@@ -119,8 +125,10 @@ def process_video(video_path, csv_path):
     # Write to a .part file first, so a crash never leaves a half CSV behind.
     part_path = csv_path.with_suffix(".part")
     check_path = csv_path.with_name(csv_path.stem + "_check.png")
-    frame_idx = w = h = 0
-    found = []                                  # True/False per frame
+    frame_idx = w = h = kept = 0
+    keep_all = not target_fps or target_fps >= fps
+    step_ms, next_keep_ms = (0.0 if keep_all else 1000 / target_fps), 0.0
+    found, times = [], []                       # per processed frame: body found?, t_ms
     vis_sum = {j: 0.0 for j in MAIN_JOINTS}     # for average confidence per joint
     vis_ok = {j: 0 for j in MAIN_JOINTS}        # frames where the joint is usable
     check_saved = False
@@ -130,15 +138,25 @@ def process_video(video_path, csv_path):
         writer = csv.writer(f)
         writer.writerow(csv_header())
         while True:
+            t_ms = frame_idx * 1000 / fps
+            if not keep_all and t_ms + 1e-6 < next_keep_ms:   # not a frame the phone would see
+                if not cap.grab():
+                    break
+                frame_idx += 1
+                continue
             ok, frame = cap.read()
             if not ok:
                 break
+            while next_keep_ms <= t_ms + 1e-6:
+                next_keep_ms += step_ms if step_ms else 1e9
+            kept += 1
+            times.append(t_ms)
             h, w = frame.shape[:2]
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            result = landmarker.detect_for_video(image, int(frame_idx * 1000 / fps))
+            result = landmarker.detect_for_video(image, int(t_ms))
 
-            row = [frame_idx, round(frame_idx * 1000 / fps), w, h]
+            row = [frame_idx, round(t_ms), w, h]
             if result.pose_landmarks:
                 found.append(True)
                 points = result.pose_landmarks[0]
@@ -158,7 +176,7 @@ def process_video(video_path, csv_path):
                 row += [""] * (len(LANDMARKS) * 3)
             writer.writerow(row)
             frame_idx += 1
-            if frame_idx % 30 == 0 and total:
+            if kept % 30 == 0 and total:
                 print(f"\r    Reading frames... {min(100, 100 * frame_idx // total)}%", end="", flush=True)
 
     cap.release()
@@ -173,17 +191,17 @@ def process_video(video_path, csv_path):
         joints[LANDMARKS[j]] = (avg, usable)
     return {
         "video": video_path.name, "width": w, "height": h, "fps": fps,
-        "frames": frame_idx, "detected": detected,
-        "missing": missing_ranges(found, fps), "joints": joints,
+        "processed_fps": fps if keep_all else target_fps, "duration": frame_idx / fps,
+        "frames": kept, "detected": detected,
+        "missing": missing_ranges(found, times), "joints": joints,
         "csv": csv_path.name, "check": check_path.name if check_saved else None,
     }
 
 
 def print_report(s, folder):
     pct = 100 * s["detected"] / s["frames"] if s["frames"] else 0
-    seconds = s["frames"] / s["fps"]
-    print(f"    Video:       {s['width']}x{s['height']}, {s['fps']:.1f} fps, "
-          f"{s['frames']} frames ({seconds:.1f} s)")
+    print(f"    Video:       {s['width']}x{s['height']}, {s['fps']:.1f} fps, {s['duration']:.1f} s; "
+          f"kept {s['frames']} frames at about {s['processed_fps']:.0f} fps")
     print(f"    Body found:  {s['detected']} of {s['frames']} frames ({pct:.0f}%)")
     gaps = s["missing"]
     shown = ", ".join(fmt_range(r) for r in gaps[:5]) or "none"
@@ -205,8 +223,8 @@ def write_summary(s, path):
         f"Video:        {s['video']}",
         f"Processed:    {datetime.now():%Y-%m-%d %H:%M}",
         f"Resolution:   {s['width']} x {s['height']} px",
-        f"Frame rate:   {s['fps']:.1f} fps",
-        f"Length:       {s['frames']} frames ({s['frames'] / s['fps']:.1f} s)",
+        f"Frame rate:   {s['fps']:.1f} fps video, processed at about {s['processed_fps']:.0f} fps",
+        f"Length:       {s['duration']:.1f} s, {s['frames']} frames processed",
         f"Body found:   {s['detected']} of {s['frames']} frames ({pct:.0f}%)",
         "",
         "Missing time ranges (no body found; these rows are blank in the CSV)",
@@ -233,6 +251,8 @@ def main():
     parser.add_argument("input", help="a video file or a folder of videos")
     parser.add_argument("--out", help="folder for the CSVs (default: a 'csv' folder next to the videos)")
     parser.add_argument("--overwrite", action="store_true", help="redo videos that already have a CSV")
+    parser.add_argument("--fps", type=float, default=REPLAY_FPS,
+                        help=f"frames per second to keep (default {REPLAY_FPS}, like the phone; 0 = every frame)")
     args = parser.parse_args()
 
     src = Path(args.input)
@@ -259,7 +279,7 @@ def main():
             print("    Skipped: CSV already exists (use --overwrite to redo).\n")
             skipped += 1
             continue
-        stats = process_video(video, csv_path)
+        stats = process_video(video, csv_path, args.fps)
         if stats is None:
             print("    Could not open this video, skipped.\n")
             failed += 1

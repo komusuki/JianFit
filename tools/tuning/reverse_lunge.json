@@ -1,0 +1,12 @@
+{
+  "id": "reverse_lunge",
+  "note": "Provisional numbers for replay step 4, from S01's Day 4 test clips. Field names follow lib/engine/exercise_config.dart; move them into assets/exercises/reverse_lunge.json once Member A's file format exists. Form checks follow roadmap Part 6 (name, category, measurement, limit); each is judged on the values at the deepest frame of the rep, as RepResult.atDeepest provides.",
+  "start_threshold": 150,
+  "complete_threshold": 160,
+  "form_checks": [
+    {"name": "shallow_front_knee", "category": "range", "measurement": "front_knee_angle", "max": 90},
+    {"name": "back_knee_high", "category": "range", "measurement": "back_knee_height", "max": 0.6},
+    {"name": "knee_past_ankle", "category": "safety", "measurement": "front_knee_over_ankle", "max": 0.37},
+    {"name": "torso_lean", "category": "cleanliness", "measurement": "torso_lean", "max": 18}
+  ]
+}

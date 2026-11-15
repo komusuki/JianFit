@@ -61,6 +61,19 @@ def test_smoothing():
         assert all(close(a, e) for a, e in zip(out, c["expected"])), (out, c)
 
 
+def test_front_leg():
+    names = {f.LEFT: "left", f.RIGHT: "right", None: None}
+    lookup = {"left": f.LEFT, "right": f.RIGHT, None: None}
+    for c in CASES["front_leg"]:
+        got = f.front_leg(c["left_ankle"], c["right_ankle"], c["facing"], c["L"], lookup[c["previous"]])
+        assert names[got] == c["expected"], c
+
+
+def test_plausible_length():
+    for c in CASES["plausible_length"]:
+        assert f.plausible_length(c["length"], c["setup_length"]) == c["expected"], c
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
