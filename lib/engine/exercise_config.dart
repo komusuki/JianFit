@@ -18,6 +18,7 @@ class ExerciseConfig {
     required this.direction,
     required this.startThreshold,
     required this.completeThreshold,
+    this.bothSidesJoints = const [],
   });
 
   final String id;
@@ -25,6 +26,9 @@ class ExerciseConfig {
 
   /// Joints that must pass the confidence check on the chosen side.
   final List<Joint> requiredJoints;
+
+  /// Joints that must pass on both sides (lunges: hip, knee and ankle).
+  final List<Joint> bothSidesJoints;
 
   /// Measurement names from the Measurement catalog.
   final List<String> measurements;

@@ -16,3 +16,10 @@ const int landingWindowMs = 500; // LANDING_WINDOW_MS
 // The main measurement must move this many degrees back from its deepest
 // value before the counter treats the bottom as passed.
 const double repTurnaroundDeg = 5;
+
+// Added in formula v0.4 and v0.4.2.
+const double frontLegMargin = 0.1; // FRONT_LEG_MARGIN
+const double plausibleMinAngleDeg = 30; // PLAUSIBLE_MIN_ANGLE_DEG
+const double plausibleLengthChange = 0.4; // PLAUSIBLE_LENGTH_CHANGE
+// A rep shorter than this (leaving Ready to Complete) is dropped. Engine setting.
+const int minRepMs = 500; // MIN_REP_MS

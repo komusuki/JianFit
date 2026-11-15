@@ -63,4 +63,98 @@ void main() {
     }
     expect(layer.isReady, isFalse);
   });
+
+  test('side by pass rate beats higher mean confidence (formula v0.4)', () {
+    // Left: confidence 1.0 and 0.45 in turn (mean 0.725, passes half the
+    // frames). Right: always 0.7 (mean 0.7, passes every frame).
+    Map<int, Pt> frame(double leftC) {
+      final m = <int, Pt>{};
+      void put(Joint j, double x, double y) {
+        m[landmarkIndex(j, Side.left)] = Pt(x, y, leftC);
+        m[landmarkIndex(j, Side.right)] = Pt(x, y, 0.7);
+      }
+
+      put(Joint.shoulder, 100, 100);
+      put(Joint.hip, 100, 300);
+      put(Joint.knee, 100, 500);
+      put(Joint.ankle, 100, 700);
+      put(Joint.heel, 90, 710);
+      put(Joint.footIndex, 130, 710);
+      return m;
+    }
+
+    final layer = MeasurementLayer(squatConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(frame(t % 200 == 0 ? 1.0 : 0.45), t);
+    }
+    expect(layer.side, Side.right);
+  });
+
+  test('setup stores the thigh and shin lengths of the chosen side', () {
+    final layer = MeasurementLayer(squatConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(standingFrame(), t);
+    }
+    final lengths = layer.setupSegments.map((s) => s.length).toList();
+    expect(lengths, [200, 200]); // hip-knee and knee-ankle, left side
+  });
+
+  test('an impossible joint angle makes the frame unjudgeable (v0.4)', () {
+    final layer = MeasurementLayer(squatConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(standingFrame(), t);
+    }
+    final bad = Map.of(standingFrame());
+    // Ankle folded back up beside the hip: knee angle about 6 degrees, with
+    // the shin still a plausible length (about 191 px vs 200 px at setup).
+    bad[landmarkIndex(Joint.ankle, Side.left)] = const Pt(80, 310, 0.9);
+    expect(layer.process(bad, 1100).status, FrameStatus.skipped);
+    // A normal frame right after is judged again.
+    expect(layer.process(standingFrame(), 1200).status, FrameStatus.judged);
+  });
+
+  test('a thigh or shin far from its setup length is unjudgeable (v0.4)', () {
+    final layer = MeasurementLayer(squatConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(standingFrame(), t);
+    }
+    final bad = Map.of(standingFrame());
+    // Shin 400 px instead of 200 px: knee angle is still 180 (straight).
+    bad[landmarkIndex(Joint.ankle, Side.left)] = const Pt(100, 900, 0.9);
+    expect(layer.process(bad, 1100).status, FrameStatus.skipped);
+  });
+
+  test('implausible frames count toward the automatic pause', () {
+    final layer = MeasurementLayer(squatConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(standingFrame(), t);
+    }
+    final bad = Map.of(standingFrame());
+    bad[landmarkIndex(Joint.ankle, Side.left)] = const Pt(100, 900, 0.9);
+    expect(layer.process(bad, 2000).status, FrameStatus.skipped);
+    expect(layer.process(bad, 3000).status, FrameStatus.paused);
+  });
+
+  test('both-sides joints must pass on both sides (lunges)', () {
+    const lungeLike = ExerciseConfig(
+      id: 'test_lunge',
+      posture: Posture.standing,
+      requiredJoints: [Joint.shoulder, Joint.hip],
+      bothSidesJoints: [Joint.hip, Joint.knee, Joint.ankle],
+      measurements: ['torso_lean'],
+      mainMeasurement: 'torso_lean',
+      direction: Direction.dip,
+      startThreshold: 150,
+      completeThreshold: 160,
+    );
+    final layer = MeasurementLayer(lungeLike);
+    final hiddenFarLeg = Map.of(standingFrame());
+    hiddenFarLeg[landmarkIndex(Joint.knee, Side.right)] = const Pt(
+      100,
+      500,
+      0.3,
+    );
+    expect(layer.hasPerson(standingFrame()), isTrue);
+    expect(layer.hasPerson(hiddenFarLeg), isFalse);
+  });
 }

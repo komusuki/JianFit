@@ -11,7 +11,7 @@ class SettingsService {
   static Future<Strictness> loadStrictness() async {
     final name = await _prefs.getString(_strictnessKey);
     return Strictness.values.firstWhere(
-          (s) => s.name == name,
+      (s) => s.name == name,
       orElse: () => Strictness.standard,
     );
   }

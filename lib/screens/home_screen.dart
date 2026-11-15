@@ -8,9 +8,8 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   void _notBuiltYet(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature is not built yet')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$feature is not built yet')));
   }
 
   @override
