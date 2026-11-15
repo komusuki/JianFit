@@ -4,6 +4,7 @@ import '../models/exercise_info.dart';
 import '../models/strictness.dart';
 import '../services/settings_service.dart';
 import '../services/fake_workout_source.dart';
+import '../services/replay_workout_source.dart';
 import 'setup_check_screen.dart';
 
 class ExerciseDetailScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
   int _sets = 3;
   int _restSeconds = 60;
   Strictness _strictness = Strictness.standard;
+  bool _replay = false; // developer replay mode (Settings)
 
   bool get _isHold => widget.exercise.type == ExerciseType.hold;
 
@@ -28,6 +30,9 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
     super.initState();
     SettingsService.loadStrictness().then((s) {
       if (mounted) setState(() => _strictness = s);
+    });
+    SettingsService.loadReplayMode().then((on) {
+      if (mounted) setState(() => _replay = on);
     });
   }
 
@@ -110,13 +115,15 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
           const SizedBox(height: 24),
           FilledButton.icon(
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Start'),
+            label: Text(_replay ? 'Start (replay)' : 'Start'),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => SetupCheckScreen(
                   exercise: e,
-                  source: FakeWorkoutSource(e),
+                  source: _replay
+                      ? ReplayWorkoutSource(e, strictness: _strictness)
+                      : FakeWorkoutSource(e),
                   target: _target,
                 ),
               ),
