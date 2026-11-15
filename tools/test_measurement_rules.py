@@ -1,7 +1,8 @@
 """Rule tests for measurements.py (formula document v0.4), on small synthetic videos.
 
 Covers: the "setup while bent" warning, side choice by pass rate, the
-plausibility check, the front-leg margin, and the automatic pause.
+plausibility check, the front-leg margin, the automatic pause, and (v0.5) the head
+and stillness checks in setup.
 Run from the tools folder:  python test_measurement_rules.py   (or: pytest)
 """
 import csv
@@ -129,6 +130,36 @@ def test_pause_redoes_setup():
     res, rows = run(frames, "bodyweight-squat")
     assert len(res["pauses"]) == 1 and len(res["setups"]) == 2
     assert any(r["status"] == "paused" for r in rows)
+
+
+def test_setup_needs_a_head():
+    # v0.5: no ear, no person (a chair has no head); one ear is enough.
+    frames = []
+    for _ in range(int(2 * FPS)):
+        p = squat()
+        p[EAR[0]][2] = p[EAR[1]][2] = 0.1
+        frames.append(p)
+    _, rows = run(frames, "bodyweight-squat")
+    assert all(r["status"] == "setup" for r in rows)
+    for p in frames:
+        p[EAR[1]][2] = 0.9
+    res, _ = run(frames, "bodyweight-squat")
+    assert len(res["setups"]) == 1
+
+
+def test_setup_waits_until_still():
+    # v0.5: walking 80 px per frame (more than 0.1 x 500 px), then standing still.
+    frames = [squat(x=500.0 + 80 * i) for i in range(FPS)] + [squat(x=1700.0) for _ in range(int(1.5 * FPS))]
+    res, _ = run(frames, "bodyweight-squat")
+    start, end = res["setups"][0][:2]
+    assert start >= 1000 and end - start >= 1000, res["setups"]
+
+
+def test_lunge_skips_the_stillness_check():
+    # v0.4.1 kept for both-sides exercises: moving frames still finish setup in 1 s.
+    frames = [lunge(0.1 * (i % 2), i % 2) for i in range(int(2 * FPS))]
+    res, _ = run(frames, "forward-lunge")
+    assert res["setups"] and res["setups"][0][0] == 0, res["setups"]
 
 
 if __name__ == "__main__":

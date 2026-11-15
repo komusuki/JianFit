@@ -30,6 +30,5 @@ class SettingsService {
   static Future<bool> loadReplayMode() async =>
       await _prefs.getBool(_replayKey) ?? false;
 
-  static Future<void> saveReplayMode(bool on) =>
-      _prefs.setBool(_replayKey, on);
+  static Future<void> saveReplayMode(bool on) => _prefs.setBool(_replayKey, on);
 }

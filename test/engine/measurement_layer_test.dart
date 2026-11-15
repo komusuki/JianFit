@@ -14,6 +14,7 @@ Map<int, Pt> standingFrame() {
     m[landmarkIndex(j, Side.right)] = Pt(x, y, 0.6);
   }
 
+  put(Joint.ear, 110, 40);
   put(Joint.shoulder, 100, 100);
   put(Joint.hip, 100, 300);
   put(Joint.knee, 100, 500);
@@ -22,6 +23,24 @@ Map<int, Pt> standingFrame() {
   put(Joint.footIndex, 130, 710);
   return m;
 }
+
+/// standingFrame() moved by dx and dy pixels.
+Map<int, Pt> shifted(double dx, double dy) => {
+  for (final e in standingFrame().entries)
+    e.key: Pt(e.value.x + dx, e.value.y + dy, e.value.c),
+};
+
+const lungeLike = ExerciseConfig(
+  id: 'test_lunge',
+  posture: Posture.standing,
+  requiredJoints: [Joint.shoulder, Joint.hip],
+  bothSidesJoints: [Joint.hip, Joint.knee, Joint.ankle],
+  measurements: ['torso_lean'],
+  mainMeasurement: 'torso_lean',
+  direction: Direction.dip,
+  startThreshold: 150,
+  completeThreshold: 160,
+);
 
 void main() {
   test('setup picks side, facing and baseline, then judges frames', () {
@@ -76,6 +95,7 @@ void main() {
         m[landmarkIndex(j, Side.right)] = Pt(x, y, 0.7);
       }
 
+      put(Joint.ear, 110, 40);
       put(Joint.shoulder, 100, 100);
       put(Joint.hip, 100, 300);
       put(Joint.knee, 100, 500);
@@ -138,17 +158,6 @@ void main() {
   });
 
   test('both-sides joints must pass on both sides (lunges)', () {
-    const lungeLike = ExerciseConfig(
-      id: 'test_lunge',
-      posture: Posture.standing,
-      requiredJoints: [Joint.shoulder, Joint.hip],
-      bothSidesJoints: [Joint.hip, Joint.knee, Joint.ankle],
-      measurements: ['torso_lean'],
-      mainMeasurement: 'torso_lean',
-      direction: Direction.dip,
-      startThreshold: 150,
-      completeThreshold: 160,
-    );
     final layer = MeasurementLayer(lungeLike);
     final hiddenFarLeg = Map.of(standingFrame());
     hiddenFarLeg[landmarkIndex(Joint.knee, Side.right)] = const Pt(
@@ -158,5 +167,55 @@ void main() {
     );
     expect(layer.hasPerson(standingFrame()), isTrue);
     expect(layer.hasPerson(hiddenFarLeg), isFalse);
+  });
+
+  test('a person needs a head: no ear means no person (v0.5, chair)', () {
+    final layer = MeasurementLayer(squatConfig);
+    final noHead = Map.of(standingFrame())
+      ..remove(landmarkIndex(Joint.ear, Side.left))
+      ..remove(landmarkIndex(Joint.ear, Side.right));
+    expect(layer.hasPerson(noHead), isFalse);
+    for (var t = 0; t <= 2000; t += 100) {
+      layer.process(noHead, t);
+    }
+    expect(layer.isReady, isFalse);
+
+    // One ear is enough (the far ear is often hidden in side view).
+    final oneEar = Map.of(standingFrame())
+      ..remove(landmarkIndex(Joint.ear, Side.right));
+    expect(layer.hasPerson(oneEar), isTrue);
+  });
+
+  test('setup waits until the person stands still (v0.5)', () {
+    final layer = MeasurementLayer(squatConfig);
+    // Walking into place: 30 px per frame, more than 0.1 x 200 px.
+    for (var t = 0; t < 1000; t += 100) {
+      layer.process(shifted(0, t * 0.3), t);
+    }
+    expect(layer.isReady, isFalse);
+    // Then standing still 300 px lower from 1000 ms.
+    for (var t = 1000; t < 2000; t += 100) {
+      layer.process(shifted(0, 300), t);
+    }
+    expect(layer.isReady, isFalse);
+    layer.process(shifted(0, 300), 2000);
+    expect(layer.isReady, isTrue);
+    expect(layer.baseline['heel_left'], 1010); // the still position
+  });
+
+  test('small jitter does not restart setup (v0.5)', () {
+    final layer = MeasurementLayer(squatConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(shifted(t % 200 == 0 ? 5 : -5, 0), t);
+    }
+    expect(layer.isReady, isTrue);
+  });
+
+  test('both-sides exercises skip the stillness check (v0.4.1)', () {
+    final layer = MeasurementLayer(lungeLike);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(shifted(t * 0.3, 0), t);
+    }
+    expect(layer.isReady, isTrue);
   });
 }

@@ -157,8 +157,8 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                         onPressed: _resting
                             ? null
                             : (v.paused
-                            ? widget.source.resume
-                            : widget.source.pause),
+                                  ? widget.source.resume
+                                  : widget.source.pause),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -215,31 +215,31 @@ class _Counters extends StatelessWidget {
       ),
       child: isHold
           ? Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('${view.holdSeconds.floor()} / $target s', style: big),
-          const Text('Hold time', style: small),
-        ],
-      )
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${view.holdSeconds.floor()} / $target s', style: big),
+                const Text('Hold time', style: small),
+              ],
+            )
           : Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('${view.correct} / $target', style: big),
-              const Text('Correct', style: small),
-            ],
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('${view.attempted}', style: big),
-              const Text('Attempted', style: small),
-            ],
-          ),
-        ],
-      ),
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${view.correct} / $target', style: big),
+                    const Text('Correct', style: small),
+                  ],
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${view.attempted}', style: big),
+                    const Text('Attempted', style: small),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 }
