@@ -33,7 +33,7 @@ import math
 import sys
 from pathlib import Path
 
-from measurements import EXERCISES
+from measurements import EXERCISES, exercise_id
 from rep_counter import RepCounter
 
 TUNING_DIR = Path(__file__).parent / "tuning"
@@ -43,7 +43,7 @@ SIDE_NAMES = {"L": "Left", "R": "Right"}
 
 
 def load_settings(ex_slug):
-    path = TUNING_DIR / f"{ex_slug.replace('-', '_')}.json"
+    path = TUNING_DIR / f"{exercise_id(ex_slug)}.json"
     if not path.exists():
         sys.exit(f"No tuning file {path}. Copy tuning/forward_lunge.json and edit it for {ex_slug}.")
     return path, json.loads(path.read_text())
