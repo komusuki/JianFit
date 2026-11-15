@@ -1,7 +1,0 @@
-{
-  "id": "bodyweight_squat",
-  "note": "Starter file made by Member C. Rep limits match squatConfig in lib/engine/exercise_config.dart (start below 150, complete above 160). Form checks are empty: Member A adds them after looking at the plots and labels (same format as forward_lunge.json; check names must match the mistake labels in the sheet).",
-  "start_threshold": 150,
-  "complete_threshold": 160,
-  "form_checks": []
-}

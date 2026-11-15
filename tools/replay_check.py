@@ -3,12 +3,20 @@
 For every video of one exercise, it reads <name>_measurements.csv (from measurements.py),
 feeds the judged frames to the rep counter (rep_counter.py, the mirror of the Dart
 counter), runs the form checks on each finished rep, and compares the result with your
-labels from the labeling sheet. Tune the numbers in tuning/<exercise>.json and run it again.
+labels from the labeling sheet.
+
+Exercise settings (rep limits and form checks) come from the app's own file,
+assets/exercises/<id>.json, when it exists, so the replay judges exactly like the phone.
+Exercises without one yet use tools/tuning/<id>.json: same form check format, with
+start_threshold and complete_threshold at the top level instead of under "tracking".
+Form checks are judged by form_judge.py (the mirror of lib/engine/form_judge.dart), at the
+strictness level you choose (default standard).
 
 Usage (from the tools folder, with .venv active):
     python replay_check.py "<videos\\csv folder>" --exercise forward-lunge --labels "<JianFit_Labels.xlsx>"
     python replay_check.py "<folder>" --exercise forward-lunge --labels "<xlsx>" --subjects S01,S02
     python replay_check.py "<folder>" --exercise forward-lunge        # no labels: list detected reps
+    python replay_check.py "<folder>" --exercise forward-lunge --labels "<xlsx>" --strictness strict
 
 Labels: download the Google Sheet as .xlsx (File > Download > Microsoft Excel). The Videos
 tab links video_id to file_name. The Reps tab takes two kinds of rows, and a video can mix them:
@@ -34,19 +42,40 @@ import sys
 from pathlib import Path
 
 from measurements import EXERCISES, exercise_id
+from form_judge import STRICTNESS, check_value, judge_rep, read_form_checks
 from rep_counter import RepCounter
 
 TUNING_DIR = Path(__file__).parent / "tuning"
+ASSETS_DIR = Path(__file__).parent.parent / "assets" / "exercises"
 TARGET_COUNT, TARGET_FORM = 95, 85
 RANGE_MIN_SEC = 8   # a label row longer than this is a whole-clip row (no single rep lasts this long)
 SIDE_NAMES = {"L": "Left", "R": "Right"}
 
 
-def load_settings(ex_slug):
-    path = TUNING_DIR / f"{exercise_id(ex_slug)}.json"
-    if not path.exists():
-        sys.exit(f"No tuning file {path}. Copy tuning/forward_lunge.json and edit it for {ex_slug}.")
-    return path, json.loads(path.read_text())
+def load_settings(ex_slug, ex):
+    """(file used, start threshold, complete threshold, form checks). The app's exercise file
+    wins over the tuning file, so the replay always judges with what the phone uses."""
+    ex_id = exercise_id(ex_slug)
+    asset, tuning = ASSETS_DIR / f"{ex_id}.json", TUNING_DIR / f"{ex_id}.json"
+    if asset.exists():
+        path, data = asset, json.loads(asset.read_text(encoding="utf-8"))
+        tracking = data.get("tracking", {})
+        start, complete = tracking.get("start_threshold"), tracking.get("complete_threshold")
+        if tracking.get("main_measurement") not in (None, ex["main"]):
+            print(f"Warning: {asset.name} uses main measurement {tracking['main_measurement']}, "
+                  f"the replay tool uses {ex['main']}.")
+    elif tuning.exists():
+        path, data = tuning, json.loads(tuning.read_text(encoding="utf-8"))
+        start, complete = data.get("start_threshold"), data.get("complete_threshold")
+    else:
+        sys.exit(f"No exercise file {asset} and no tuning file {tuning}. "
+                 f"Copy tuning/forward_lunge.json and edit it for {ex_slug}.")
+    checks, problems = read_form_checks(data.get("form_checks"), ex["measurements"])
+    if not isinstance(start, (int, float)) or not isinstance(complete, (int, float)):
+        problems.append("start_threshold and complete_threshold must be numbers")
+    if problems:
+        sys.exit(f"{path.name} has {len(problems)} problem(s):\n" + "\n".join(f"  - {p}" for p in problems))
+    return path, start, complete, checks
 
 
 def find_measurement_csvs(folder, ex_slug):
@@ -67,9 +96,9 @@ def to_float(text):
     return None if math.isnan(v) else v
 
 
-def detect_reps(csv_path, ex, settings):
+def detect_reps(csv_path, ex, start, complete):
     """Feed judged frames to the rep counter; reset it when the measurement layer paused."""
-    counter = RepCounter(ex["direction"], settings["start_threshold"], settings["complete_threshold"])
+    counter = RepCounter(ex["direction"], start, complete)
     names = ex["measurements"]
     reps = []
     with open(csv_path, newline="") as fh:
@@ -91,16 +120,10 @@ def detect_reps(csv_path, ex, settings):
     return reps
 
 
-def run_checks(rep, checks, main_name):
-    """Each check uses the value at the deepest frame. Returns (fired, not_judged)."""
-    fired, not_judged = [], []
-    for c in checks:
-        v = rep.deepest if c["measurement"] == main_name else rep.at_deepest.get(c["measurement"])
-        if v is None:
-            not_judged.append(c["name"])
-        elif ("max" in c and v > c["max"]) or ("min" in c and v < c["min"]):
-            fired.append(c["name"])
-    return fired, not_judged
+def run_checks(rep, checks, strictness):
+    """The form judge's verdict as (fired, not_judged) check names."""
+    verdict = judge_rep(rep, checks, strictness)
+    return [c.name for c in verdict.failed], [c.name for c in verdict.skipped]
 
 
 def load_labels(xlsx):
@@ -167,14 +190,15 @@ def main():
     parser.add_argument("--exercise", required=True, choices=sorted(EXERCISES))
     parser.add_argument("--labels", help="the labeling sheet downloaded as .xlsx")
     parser.add_argument("--subjects", help="only these subjects, for example S01,S02")
+    parser.add_argument("--strictness", choices=STRICTNESS, default="standard",
+                        help="limits for cleanliness checks (default standard)")
     args = parser.parse_args()
 
     folder = Path(args.folder)
     ex = EXERCISES[args.exercise]
     if ex["main"] is None:
         sys.exit(f"{args.exercise} is a hold; replay_check.py handles rep exercises only.")
-    settings_path, settings = load_settings(args.exercise)
-    checks = settings.get("form_checks", [])
+    settings_path, start, complete, checks = load_settings(args.exercise, ex)
     csvs = find_measurement_csvs(folder, args.exercise)
     if args.subjects:
         wanted = {s.strip().upper() for s in args.subjects.split(",")}
@@ -184,21 +208,22 @@ def main():
     labels = load_labels(args.labels) if args.labels else {}
 
     direction = "below" if ex["direction"] == "dip" else "above"
-    print(f"Replay check: {args.exercise}   (settings: tuning/{settings_path.name})")
-    print(f"  Rep: starts {direction} {settings['start_threshold']}, completes back past "
-          f"{settings['complete_threshold']} ({ex['main']})")
+    print(f"Replay check: {args.exercise}   (settings: {settings_path.parent.name}/{settings_path.name}, "
+          f"strictness {args.strictness})")
+    print(f"  Rep: starts {direction} {start}, completes back past {complete} ({ex['main']})")
     for c in checks:
-        limit = f"> {c['max']}" if "max" in c else f"< {c['min']}"
-        print(f"  Check {c['name']}: {c['measurement']} {limit} at the deepest frame ({c['category']})")
+        fails = f"> {c.limit_for(args.strictness):g}" if c.kind == "max" else f"< {c.limit_for(args.strictness):g}"
+        where = "at the deepest frame" if c.timing == "bottom" else "at any point in the rep"
+        print(f"  Check {c.name}: fails if {c.measurement} {fails} {where} ({c.category})")
     print()
 
     results, totals, per_subject = [], {}, {}
-    check_stats = {c["name"]: dict(caught=0, missed=0, false_on_correct=0, false_on_other=0) for c in checks}
+    check_stats = {c.name: dict(caught=0, missed=0, false_on_correct=0, false_on_other=0) for c in checks}
     for n, csv_path in enumerate(csvs, start=1):
         stem = csv_path.parent.name
         subject = stem.split("_")[1].upper() if "_" in stem else "?"
-        reps = detect_reps(csv_path, ex, settings)
-        verdicts = [run_checks(r, checks, ex["main"]) for r in reps]
+        reps = detect_reps(csv_path, ex, start, complete)
+        verdicts = [run_checks(r, checks, args.strictness) for r in reps]
         labeled = labels.get(stem.lower(), [])
         print(f"[{n}/{len(csvs)}] {stem}")
 
@@ -261,12 +286,12 @@ def main():
                        detected_end_sec=round(r.end_ms / 1000, 2), detected_side=leg,
                        deepest=round(r.deepest, 2), fired=";".join(fired), not_judged=";".join(not_judged))
             for c in checks:
-                v = r.deepest if c["measurement"] == ex["main"] else r.at_deepest.get(c["measurement"])
-                row[c["measurement"]] = "" if v is None else round(v, 3)
+                v = check_value(c, r)
+                row[c.name] = "" if v is None else round(v, 3)
             label = lab["label"]
             excluded = "exclude" in lab["notes"].lower() or not label
             if not excluded and label != "correct" and label not in check_stats:
-                row["result"] = f"label '{label}' has no check in the tuning file"
+                row["result"] = f"label '{label}' has no check in {settings_path.name}"
             elif not excluded:
                 agree = (not fired) if label == "correct" else (label in fired)
                 s["form_judged"] += 1

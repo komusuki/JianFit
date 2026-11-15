@@ -26,6 +26,10 @@ class RepResult:
     at_deepest: dict      # all smoothed measurements at the deepest frame (for the form judge)
     duration_ms: float    # from leaving Ready to Complete
     end_ms: float
+    # Lowest and highest smoothed value of each measurement during the rep, from leaving
+    # Ready to Complete (for form checks with "when": throughout).
+    min_during: dict = field(default_factory=dict)
+    max_during: dict = field(default_factory=dict)
     start_ms: float = field(init=False)   # Python only, for matching labels: end - duration
 
     def __post_init__(self):
@@ -46,6 +50,8 @@ class RepCounter:
         self.count = 0
         self._extreme = None
         self._at_extreme = {}
+        self._min = {}
+        self._max = {}
         self._start_ms = 0
 
     def _dip(self):
@@ -60,6 +66,14 @@ class RepCounter:
     def _deeper(self, v):
         return v < self._extreme if self._dip() else v > self._extreme
 
+    def _track(self, values):
+        for k, v in values.items():
+            if not isinstance(v, (int, float)):
+                continue                        # Python only: skip text columns such as front_leg
+            lo, hi = self._min.get(k), self._max.get(k)
+            self._min[k] = v if lo is None else min(lo, v)
+            self._max[k] = v if hi is None else max(hi, v)
+
     def update(self, main, values, t_ms):
         """Feed one judged frame. Returns a RepResult when a rep completes."""
         if self.stage == READY:
@@ -68,7 +82,12 @@ class RepCounter:
                 self._start_ms = t_ms
                 self._extreme = main
                 self._at_extreme = dict(values)
+                self._min.clear()
+                self._max.clear()
+                self._track(values)
             return None
+
+        self._track(values)
 
         if self._returned(main):
             if t_ms - self._start_ms < self.min_rep_ms:
@@ -76,7 +95,8 @@ class RepCounter:
                 return None
             self.count += 1
             result = RepResult(deepest=self._extreme, at_deepest=self._at_extreme,
-                               duration_ms=t_ms - self._start_ms, end_ms=t_ms)
+                               duration_ms=t_ms - self._start_ms, end_ms=t_ms,
+                               min_during=dict(self._min), max_during=dict(self._max))
             self.reset(keep_count=True)
             return result
 
@@ -93,5 +113,7 @@ class RepCounter:
         self.stage = READY
         self._extreme = None
         self._at_extreme = {}
+        self._min.clear()
+        self._max.clear()
         if not keep_count:
             self.count = 0
