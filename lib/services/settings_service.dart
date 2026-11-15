@@ -6,6 +6,7 @@ import '../models/strictness.dart';
 class SettingsService {
   static const _strictnessKey = 'strictness';
   static const _voiceKey = 'voice_on';
+  static const _replayKey = 'replay_mode';
   static final _prefs = SharedPreferencesAsync();
 
   static Future<Strictness> loadStrictness() async {
@@ -23,4 +24,12 @@ class SettingsService {
       await _prefs.getBool(_voiceKey) ?? true;
 
   static Future<void> saveVoiceOn(bool on) => _prefs.setBool(_voiceKey, on);
+
+  /// Developer: Single Exercise plays a recorded clip from assets/replays/
+  /// instead of the camera (Member C's replay mode).
+  static Future<bool> loadReplayMode() async =>
+      await _prefs.getBool(_replayKey) ?? false;
+
+  static Future<void> saveReplayMode(bool on) =>
+      _prefs.setBool(_replayKey, on);
 }

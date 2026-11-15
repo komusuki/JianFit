@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/strictness.dart';
@@ -13,6 +14,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   Strictness _strictness = Strictness.standard;
   bool _voiceOn = true;
+  bool _replay = false;
   bool _loaded = false;
 
   @override
@@ -24,10 +26,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _load() async {
     final strictness = await SettingsService.loadStrictness();
     final voiceOn = await SettingsService.loadVoiceOn();
+    final replay = await SettingsService.loadReplayMode();
     if (!mounted) return;
     setState(() {
       _strictness = strictness;
       _voiceOn = voiceOn;
+      _replay = replay;
       _loaded = true;
     });
   }
@@ -84,6 +88,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SettingsService.saveVoiceOn(v);
                   },
                 ),
+                // Hidden in release builds: only debug builds show it.
+                if (kDebugMode) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Developer',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Replay mode'),
+                    subtitle: const Text(
+                      'Single Exercise plays a recorded clip from '
+                      'assets/replays/ instead of the camera',
+                    ),
+                    value: _replay,
+                    onChanged: (v) {
+                      setState(() => _replay = v);
+                      SettingsService.saveReplayMode(v);
+                    },
+                  ),
+                ],
               ],
             ),
     );
