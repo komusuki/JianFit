@@ -92,8 +92,14 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
           const SizedBox(height: 8),
           SegmentedButton<Strictness>(
             segments: const [
-              ButtonSegment(value: Strictness.beginner, label: Text('Beginner')),
-              ButtonSegment(value: Strictness.standard, label: Text('Standard')),
+              ButtonSegment(
+                value: Strictness.beginner,
+                label: Text('Beginner'),
+              ),
+              ButtonSegment(
+                value: Strictness.standard,
+                label: Text('Standard'),
+              ),
               ButtonSegment(value: Strictness.strict, label: Text('Strict')),
             ],
             selected: {_strictness},
@@ -104,7 +110,9 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
             icon: const Icon(Icons.play_arrow),
             label: const Text('Start'),
             onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Camera setup check is not built yet')),
+              const SnackBar(
+                content: Text('Camera setup check is not built yet'),
+              ),
             ),
           ),
         ],
@@ -139,10 +147,7 @@ class _NumberPicker extends StatelessWidget {
           icon: const Icon(Icons.remove),
           onPressed: value - step >= min ? () => onChanged(value - step) : null,
         ),
-        SizedBox(
-          width: 48,
-          child: Text('$value', textAlign: TextAlign.center),
-        ),
+        SizedBox(width: 48, child: Text('$value', textAlign: TextAlign.center)),
         IconButton(
           icon: const Icon(Icons.add),
           onPressed: value + step <= max ? () => onChanged(value + step) : null,

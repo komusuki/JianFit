@@ -37,7 +37,9 @@ class ExerciseListScreen extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => ExerciseDetailScreen(exercise: e)),
+                  MaterialPageRoute(
+                    builder: (_) => ExerciseDetailScreen(exercise: e),
+                  ),
                 ),
               ),
           ],

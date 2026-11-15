@@ -80,11 +80,16 @@ class RepCounter {
     }
 
     if (_returned(main)) {
+      final duration = tMs - _startMs;
+      if (duration < minRepMs) {
+        reset(keepCount: true); // formula v0.4.2: too short to be a real rep
+        return null;
+      }
       count++;
       final result = RepResult(
         deepest: _extreme!,
         atDeepest: _atExtreme,
-        durationMs: tMs - _startMs,
+        durationMs: duration,
         endMs: tMs,
       );
       reset(keepCount: true);
