@@ -6,6 +6,7 @@ import '../models/exercise_info.dart';
 import '../models/workout_view.dart';
 import '../services/workout_source.dart';
 import 'live_workout_screen.dart';
+import '../models/workout_records.dart';
 
 // Camera setup check (roadmap Part 10): placement instructions, a body
 // outline, and a 3-2-1 countdown once the source says the person is ready.
@@ -14,14 +15,15 @@ class SetupCheckScreen extends StatefulWidget {
     super.key,
     required this.exercise,
     required this.source,
-    required this.target,
+    required this.plan,
   });
 
   final ExerciseInfo exercise;
   final WorkoutSource source;
 
   /// Correct reps, or seconds for hold exercises.
-  final int target;
+  /// Target, sets and rest for this exercise.
+  final RoutineItem plan;
 
   @override
   State<SetupCheckScreen> createState() => _SetupCheckScreenState();
@@ -71,7 +73,7 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
         builder: (_) => LiveWorkoutScreen(
           exercise: widget.exercise,
           source: widget.source,
-          target: widget.target,
+          plan: widget.plan,
         ),
       ),
     );

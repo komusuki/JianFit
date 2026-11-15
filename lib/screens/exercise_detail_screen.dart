@@ -6,6 +6,7 @@ import '../services/settings_service.dart';
 import '../services/fake_workout_source.dart';
 import '../services/replay_workout_source.dart';
 import 'setup_check_screen.dart';
+import '../models/workout_records.dart';
 
 class ExerciseDetailScreen extends StatefulWidget {
   const ExerciseDetailScreen({super.key, required this.exercise});

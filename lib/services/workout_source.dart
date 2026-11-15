@@ -19,6 +19,8 @@ abstract class WorkoutSource {
   Widget buildPreview();
 
   /// The countdown finished: start counting reps or hold time.
+  /// Start a set: counts, cue and hold time restart from zero, then counting
+  /// begins. Called once per set.
   void beginSet();
 
   /// The Pause and Resume buttons.
