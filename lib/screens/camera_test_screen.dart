@@ -4,11 +4,14 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../engine/form_judge.dart';
 import '../engine/measurement_layer.dart';
 import '../engine/rep_counter.dart';
 import '../models/exercise_definition.dart';
+import '../models/strictness.dart';
 import '../services/exercise_loader.dart';
 import '../services/pose_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/skeleton_painter.dart';
 
 class CameraTestScreen extends StatefulWidget {
@@ -37,6 +40,8 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
   FrameResult? _frame;
   bool _isPerson = false;
   RepResult? _lastRep;
+  RepVerdict? _lastVerdict;
+  Strictness _strictness = Strictness.standard;
   String _status = 'Starting camera...';
   int _frames = 0;
   int _cameraFrames = 0;
@@ -66,6 +71,7 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
     _exercise = exercise;
     _layer = MeasurementLayer(exercise.config);
     _counter = RepCounter.forExercise(exercise.config);
+    _strictness = await SettingsService.loadStrictness(); // Member B's setting
     debugPrint(
       'EXERCISE loaded: ${exercise.id} '
       '(${loaded.exercises.length} file(s), ${loaded.errors.length} error(s))',
@@ -156,12 +162,22 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
       if (main != null) {
         final rep = counter.update(main, frame.values, tMs);
         if (rep != null) {
+          final verdict = judgeRep(rep, exercise.formChecks, _strictness);
           _lastRep = rep;
+          _lastVerdict = verdict;
           debugPrint(
             'REP ${counter.count}: '
             'deepest=${rep.deepest.toStringAsFixed(1)} '
-            'duration=${rep.durationMs} ms',
+            'duration=${rep.durationMs} ms  '
+            '${_verdictText(verdict)}',
           );
+          for (final r in verdict.results) {
+            debugPrint(
+              '  ${r.check.name}: value=${r.value?.toStringAsFixed(3) ?? '-'} '
+              '${r.check.kind.name} ${r.limit} -> '
+              '${r.passed == null ? 'skipped' : (r.passed! ? 'pass' : 'FAIL')}',
+            );
+          }
         }
       }
     }
@@ -196,7 +212,15 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
       _layer?.reset();
       _counter?.reset();
       _lastRep = null;
+      _lastVerdict = null;
     });
+  }
+
+  /// "correct", or "attempted (failed checks)" plus the top cue.
+  static String _verdictText(RepVerdict v) {
+    if (v.correct) return 'correct';
+    final names = v.failed.map((c) => c.name).join(', ');
+    return 'attempted ($names) cue: ${v.topFailed!.cue}';
   }
 
   String _infoText() {
@@ -210,7 +234,7 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
       final mainName = exercise.config.mainMeasurement;
       final main = f.values[mainName];
       lines
-        ..add(exercise.info.name)
+        ..add('${exercise.info.name}   Strictness: ${_strictness.name}')
         ..add('Status: ${f.status.name}   Side: ${_layer?.side?.name ?? '-'}')
         ..add(
           '$mainName: ${main == null ? '-' : main.toStringAsFixed(0)}   '
@@ -218,11 +242,14 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
         )
         ..add('Reps: ${counter.count}');
       final r = _lastRep;
-      if (r != null) {
-        lines.add(
-          'Last rep: deepest ${r.deepest.toStringAsFixed(0)}, '
-          '${(r.durationMs / 1000).toStringAsFixed(1)} s',
-        );
+      final v = _lastVerdict;
+      if (r != null && v != null) {
+        lines
+          ..add(
+            'Last rep: deepest ${r.deepest.toStringAsFixed(0)}, '
+            '${(r.durationMs / 1000).toStringAsFixed(1)} s',
+          )
+          ..add(_verdictText(v));
       }
     }
     return lines.join('\n');

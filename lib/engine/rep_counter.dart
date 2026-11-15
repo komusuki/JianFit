@@ -8,6 +8,8 @@
 //   Coming Up  -> RepStage.comingUp
 //   Complete   -> the moment update() returns a RepResult
 
+import 'dart:math';
+
 import 'constants.dart';
 import 'exercise_config.dart';
 
@@ -19,6 +21,8 @@ class RepResult {
     required this.atDeepest,
     required this.durationMs,
     required this.endMs,
+    this.minDuring = const {},
+    this.maxDuring = const {},
   });
 
   /// Deepest value of the main measurement (minimum for dip, maximum for hill).
@@ -30,6 +34,11 @@ class RepResult {
   /// From leaving Ready to Complete.
   final int durationMs;
   final int endMs;
+
+  /// Lowest and highest smoothed value of each measurement during the rep,
+  /// from leaving Ready to Complete (for form checks with "when": throughout).
+  final Map<String, double> minDuring;
+  final Map<String, double> maxDuring;
 }
 
 class RepCounter {
@@ -59,6 +68,8 @@ class RepCounter {
   int count = 0;
   double? _extreme;
   Map<String, double> _atExtreme = const {};
+  final Map<String, double> _min = {};
+  final Map<String, double> _max = {};
   int _startMs = 0;
 
   bool get _dip => direction == Direction.dip;
@@ -66,6 +77,14 @@ class RepCounter {
   bool _returned(double v) =>
       _dip ? v > completeThreshold : v < completeThreshold;
   bool _deeper(double v) => _dip ? v < _extreme! : v > _extreme!;
+
+  void _track(Map<String, double> values) {
+    for (final e in values.entries) {
+      final lo = _min[e.key], hi = _max[e.key];
+      _min[e.key] = lo == null ? e.value : min(lo, e.value);
+      _max[e.key] = hi == null ? e.value : max(hi, e.value);
+    }
+  }
 
   /// Feed one judged frame. Returns a RepResult when a rep completes.
   RepResult? update(double main, Map<String, double> values, int tMs) {
@@ -75,9 +94,14 @@ class RepCounter {
         _startMs = tMs;
         _extreme = main;
         _atExtreme = Map.of(values);
+        _min.clear();
+        _max.clear();
+        _track(values);
       }
       return null;
     }
+
+    _track(values);
 
     if (_returned(main)) {
       final duration = tMs - _startMs;
@@ -91,6 +115,8 @@ class RepCounter {
         atDeepest: _atExtreme,
         durationMs: duration,
         endMs: tMs,
+        minDuring: Map.of(_min),
+        maxDuring: Map.of(_max),
       );
       reset(keepCount: true);
       return result;
@@ -112,6 +138,8 @@ class RepCounter {
     stage = RepStage.ready;
     _extreme = null;
     _atExtreme = const {};
+    _min.clear();
+    _max.clear();
     if (!keepCount) count = 0;
   }
 }

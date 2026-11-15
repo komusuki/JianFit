@@ -73,6 +73,50 @@ void main() {
     expect(c.count, 1);
   });
 
+  test('records the lowest and highest value of each measurement', () {
+    final c = squat();
+    final frames = [
+      (175.0, 0.00),
+      (140.0, 0.02), // leaves Ready
+      (100.0, 0.06), // heel lifts at the bottom
+      (130.0, 0.01),
+      (165.0, 0.00), // complete
+    ];
+    RepResult? done;
+    for (var i = 0; i < frames.length; i++) {
+      final (knee, heel) = frames[i];
+      done =
+          c.update(knee, {'knee_angle': knee, 'heel_lift': heel}, i * 300) ??
+          done;
+    }
+    expect(done, isNotNull);
+    expect(done!.minDuring['knee_angle'], 100);
+    expect(done.maxDuring['knee_angle'], 165);
+    expect(done.maxDuring['heel_lift'], 0.06);
+    expect(done.minDuring['heel_lift'], 0.0);
+  });
+
+  test('the next rep starts its ranges fresh', () {
+    final c = squat();
+    var t = 0;
+    RepResult? last;
+    for (final knee in [
+      175.0,
+      140.0,
+      60.0,
+      165.0,
+      175.0,
+      140.0,
+      110.0,
+      165.0,
+    ]) {
+      last = c.update(knee, {'knee_angle': knee}, t) ?? last;
+      t += 300;
+    }
+    expect(c.count, 2);
+    expect(last!.minDuring['knee_angle'], 110); // not 60 from the first rep
+  });
+
   test('hill exercise (glute bridge) counts the other way', () {
     final c = RepCounter(
       direction: Direction.hill,
