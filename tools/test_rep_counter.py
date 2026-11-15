@@ -92,6 +92,46 @@ def test_invalid_thresholds_rejected():
         raise AssertionError(f"accepted invalid thresholds {args}")
 
 
+# Ported from test/engine/rep_counter_test.dart (Member A).
+
+def test_rep_of_exactly_min_rep_ms_still_counts():
+    c = RepCounter("dip", 150, 160)
+    assert c.update(175, {}, 0) is None
+    assert c.update(140, {}, 100) is None       # leaves Ready
+    assert c.update(120, {}, 300) is None
+    assert c.update(165, {}, 600) is not None   # 500 ms long
+    assert c.count == 1
+
+
+def test_records_lowest_and_highest_value_of_each_measurement():
+    c = RepCounter("dip", 150, 160)
+    frames = [(175.0, 0.00), (140.0, 0.02), (100.0, 0.06), (130.0, 0.01), (165.0, 0.00)]
+    done = None
+    for i, (knee, heel) in enumerate(frames):
+        done = c.update(knee, {"knee_angle": knee, "heel_lift": heel}, i * 300) or done
+    assert done is not None
+    assert done.min_during["knee_angle"] == 100 and done.max_during["knee_angle"] == 165
+    assert done.max_during["heel_lift"] == 0.06 and done.min_during["heel_lift"] == 0.0
+
+
+def test_next_rep_starts_its_ranges_fresh():
+    c = RepCounter("dip", 150, 160)
+    last = None
+    for i, knee in enumerate([175.0, 140.0, 60.0, 165.0, 175.0, 140.0, 110.0, 165.0]):
+        last = c.update(knee, {"knee_angle": knee}, i * 300) or last
+    assert c.count == 2
+    assert last.min_during["knee_angle"] == 110       # not 60 from the first rep
+
+
+def test_text_values_are_not_tracked():
+    # Python only: replay_check passes front_leg ("L"/"R") with the numbers.
+    c = RepCounter("dip", 150, 160)
+    done = None
+    for i, knee in enumerate([175.0, 140.0, 100.0, 165.0]):
+        done = c.update(knee, {"front_knee_angle": knee, "front_leg": "L"}, i * 300) or done
+    assert "front_leg" not in done.min_during and done.min_during["front_knee_angle"] == 100
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

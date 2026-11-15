@@ -1,0 +1,7 @@
+{
+  "id": "glute_bridge",
+  "note": "Rep limits are a starting guess on hip_angle. This is a hill: a rep starts when the angle rises above 155 and completes when it drops back below 140, so start must be higher than complete. Check them against the plots. Owner: Member B. Starter file made by Member C, no form checks yet. The owner adds them after looking at the plots and labels (same format as forward_lunge.json; check names must match the mistake labels in the sheet).",
+  "start_threshold": 155,
+  "complete_threshold": 140,
+  "form_checks": []
+}

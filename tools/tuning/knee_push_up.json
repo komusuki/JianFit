@@ -1,0 +1,7 @@
+{
+  "id": "knee_push_up",
+  "note": "Rep limits are a starting guess on elbow_angle (dip: start below 140, complete above 160); check them against the plots. Owner: Member B. Starter file made by Member C, no form checks yet. The owner adds them after looking at the plots and labels (same format as forward_lunge.json; check names must match the mistake labels in the sheet).",
+  "start_threshold": 140,
+  "complete_threshold": 160,
+  "form_checks": []
+}

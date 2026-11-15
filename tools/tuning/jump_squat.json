@@ -1,0 +1,7 @@
+{
+  "id": "jump_squat",
+  "note": "Rep limits copied from the bodyweight squat (the pair shares its logic, roadmap Part 4), on knee_angle. Owner: Member A. Starter file made by Member C, no form checks yet. The owner adds them after looking at the plots and labels (same format as forward_lunge.json; check names must match the mistake labels in the sheet).",
+  "start_threshold": 150,
+  "complete_threshold": 160,
+  "form_checks": []
+}
