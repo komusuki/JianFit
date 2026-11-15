@@ -1,0 +1,53 @@
+{
+  "id": "bodyweight_squat",
+  "name": "Bodyweight squat",
+  "pattern": "Squat",
+  "level": "Beginner",
+  "type": "reps",
+  "demo_clip": "assets/demos/bodyweight_squat.mp4",
+  "camera": {
+    "view": "Side",
+    "orientation": "portrait",
+    "placement": "Phone at hip height, 2 to 3 meters away, facing your side."
+  },
+  "tracking": {
+    "posture": "standing",
+    "required_joints": ["shoulder", "hip", "knee", "ankle"],
+    "both_sides_joints": [],
+    "measurements": ["knee_angle", "hip_angle", "torso_lean", "heel_lift"],
+    "main_measurement": "knee_angle",
+    "direction": "dip",
+    "start_threshold": 150,
+    "complete_threshold": 160,
+    "one_sided": false
+  },
+  "form_checks": [
+    {
+      "name": "depth",
+      "category": "range",
+      "measurement": "knee_angle",
+      "when": "bottom",
+      "max": 100,
+      "cue": "Go lower.",
+      "priority": 2
+    },
+    {
+      "name": "torso_lean",
+      "category": "cleanliness",
+      "measurement": "torso_lean",
+      "when": "bottom",
+      "max": {"beginner": 50, "standard": 45, "strict": 40},
+      "cue": "Keep your chest up.",
+      "priority": 3
+    },
+    {
+      "name": "heels_down",
+      "category": "cleanliness",
+      "measurement": "heel_lift",
+      "when": "throughout",
+      "max": {"beginner": 0.08, "standard": 0.05, "strict": 0.03},
+      "cue": "Keep your heels down.",
+      "priority": 4
+    }
+  ]
+}
