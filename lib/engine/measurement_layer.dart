@@ -1,5 +1,7 @@
-// Measurement layer (roadmap Part 4), following the Shared Formula Document:
-// setup window -> confidence check -> body length -> measurements -> smoothing.
+// Measurement layer (roadmap Part 4), following the Shared Formula Document
+// (v0.4.2): setup window -> confidence check -> body length -> plausibility
+// -> measurements -> smoothing. Keep the order the same as Member C's
+// tools/measurements.py.
 
 import 'constants.dart';
 import 'exercise_config.dart';
@@ -8,13 +10,14 @@ import 'landmarks.dart';
 import 'smoothing.dart';
 
 enum FrameStatus {
-  /// Collecting the setup window (side, facing, baseline).
+  /// Collecting the setup window (side, facing, baseline, setup lengths).
   setup,
 
   /// Measured; [FrameResult.values] holds the smoothed values.
   judged,
 
-  /// Not judgeable (low confidence, no person, or body too small).
+  /// Not judgeable (low confidence, no person, body too small, or an
+  /// impossible angle or segment length).
   skipped,
 
   /// No judgeable frame for lowConfPauseMs. Setup starts again.
@@ -66,6 +69,9 @@ final Map<String, MeasureFn> measurementRegistry = {
   },
 };
 
+/// A thigh or shin and its median length during setup (formula v0.4).
+typedef SetupSegment = ({int a, int b, double length});
+
 class MeasurementLayer {
   MeasurementLayer(this.config) {
     for (final name in config.measurements) {
@@ -81,6 +87,7 @@ class MeasurementLayer {
   final ExerciseConfig config;
   final Map<String, MovingAverage> _smoothers = {};
   final List<Map<int, Pt>> _setupFrames = [];
+  final List<SetupSegment> _segments = [];
   int? _setupStartMs;
   int? _lastJudgedMs;
 
@@ -93,24 +100,34 @@ class MeasurementLayer {
 
   bool get isReady => side != null;
 
-  /// True when the required joints pass the confidence check on at least
-  /// one side. Weak false detections (for example on a chair) fail this.
-  bool hasPerson(Map<int, Pt> lm) {
-    for (final s in Side.values) {
-      final ok = config.requiredJoints.every((j) {
-        final p = lm[landmarkIndex(j, s)];
-        return p != null && p.c >= minConfidence;
-      });
-      if (ok) return true;
-    }
-    return false;
+  /// Setup thigh and shin lengths, for the plausibility check.
+  List<SetupSegment> get setupSegments => List.unmodifiable(_segments);
+
+  bool _passes(Map<int, Pt> lm, Joint j, Side s) {
+    final p = lm[landmarkIndex(j, s)];
+    return p != null && p.c >= minConfidence;
   }
 
-  /// Start a new set: forget side, facing, baseline and smoothing.
+  /// True when the required joints pass the confidence check on at least
+  /// one side, and the both-sides joints pass on both sides. Weak false
+  /// detections (for example on a chair) fail this.
+  bool hasPerson(Map<int, Pt> lm) {
+    final bothOk = config.bothSidesJoints.every(
+      (j) => _passes(lm, j, Side.left) && _passes(lm, j, Side.right),
+    );
+    final sideOk = Side.values.any(
+      (s) => config.requiredJoints.every((j) => _passes(lm, j, s)),
+    );
+    return bothOk && sideOk;
+  }
+
+  /// Start a new set: forget side, facing, baseline, setup lengths and
+  /// smoothing.
   void reset() {
     side = null;
     facing = 1;
     baseline.clear();
+    _segments.clear();
     _setupFrames.clear();
     _setupStartMs = null;
     _lastJudgedMs = null;
@@ -124,46 +141,75 @@ class MeasurementLayer {
     if (side == null) return _setup(lm, tMs);
 
     final bodyLen = _judgeableBodyLength(lm);
-    if (bodyLen == null) {
-      if (tMs - _lastJudgedMs! >= lowConfPauseMs) {
-        reset();
-        return FrameResult(FrameStatus.paused, tMs);
-      }
-      return FrameResult(FrameStatus.skipped, tMs);
-    }
+    if (bodyLen == null) return _notJudged(tMs);
+
+    final ctx = MeasurementContext(lm, side!, facing, bodyLen, baseline);
+    final raw = {
+      for (final name in config.measurements)
+        name: measurementRegistry[name]!(ctx),
+    };
+
+    // v0.4: an impossible joint angle makes the whole frame unjudgeable.
+    final implausible = raw.entries.any(
+      (e) =>
+          e.key.endsWith('_angle') &&
+          !e.value.isNaN &&
+          e.value < plausibleMinAngleDeg,
+    );
+    if (implausible) return _notJudged(tMs);
 
     if (tMs - _lastJudgedMs! > smoothResetMs) {
       for (final s in _smoothers.values) {
         s.reset();
       }
     }
-
-    final ctx = MeasurementContext(lm, side!, facing, bodyLen, baseline);
     final values = <String, double>{};
-    for (final name in config.measurements) {
-      final raw = measurementRegistry[name]!(ctx);
-      if (raw.isNaN) continue; // unjudgeable for this measurement only
-      values[name] = _smoothers[name]!.add(raw);
+    for (final e in raw.entries) {
+      if (e.value.isNaN) continue; // unjudgeable for this measurement only
+      values[e.key] = _smoothers[e.key]!.add(e.value);
     }
     _lastJudgedMs = tMs;
     return FrameResult(FrameStatus.judged, tMs, values);
   }
 
-  /// Body length if every required joint passes, otherwise null.
+  /// A frame that can't be judged: nothing is smoothed and _lastJudgedMs
+  /// stays the same. After lowConfPauseMs of these, pause and set up again.
+  FrameResult _notJudged(int tMs) {
+    if (tMs - _lastJudgedMs! >= lowConfPauseMs) {
+      reset();
+      return FrameResult(FrameStatus.paused, tMs);
+    }
+    return FrameResult(FrameStatus.skipped, tMs);
+  }
+
+  /// Body length if every required joint passes and every setup segment is
+  /// a plausible length; otherwise null.
   double? _judgeableBodyLength(Map<int, Pt> lm) {
     final joints = {...config.requiredJoints, Joint.shoulder, Joint.hip};
     for (final j in joints) {
-      final p = lm[landmarkIndex(j, side!)];
-      if (p == null || p.c < minConfidence) return null;
+      if (!_passes(lm, j, side!)) return null;
+    }
+    for (final j in config.bothSidesJoints) {
+      if (!_passes(lm, j, Side.left) || !_passes(lm, j, Side.right)) {
+        return null;
+      }
     }
     final len = bodyLength(
       lm[landmarkIndex(Joint.shoulder, side!)]!,
       lm[landmarkIndex(Joint.hip, side!)]!,
     );
-    return len < minBodyLengthPx ? null : len;
+    if (len < minBodyLengthPx) return null;
+
+    // v0.4: a thigh or shin far from its setup length is impossible.
+    for (final seg in _segments) {
+      final pa = lm[seg.a], pb = lm[seg.b];
+      if (pa == null || pb == null) return null;
+      if (!plausibleLength(segmentLength(pa, pb), seg.length)) return null;
+    }
+    return len;
   }
 
-  // Setup window: the first baselineMs in which a person is detected
+  // Setup window: the first baselineMs in which a person passes hasPerson
   // (the rule for recorded videos). Once Member B's countdown exists,
   // call reset() when its last second starts instead.
   FrameResult _setup(Map<int, Pt> lm, int tMs) {
@@ -179,6 +225,14 @@ class MeasurementLayer {
   }
 
   void _finishSetup(int tMs) {
+    // v0.4: the side whose required joints pass the confidence check in more
+    // setup frames; if equal, the higher mean confidence; if still equal, left.
+    double passRate(Side s) =>
+        _setupFrames
+            .where((f) => config.requiredJoints.every((j) => _passes(f, j, s)))
+            .length /
+        _setupFrames.length;
+
     double meanConfidence(Side s) {
       var total = 0.0;
       for (final f in _setupFrames) {
@@ -191,8 +245,11 @@ class MeasurementLayer {
       return total / _setupFrames.length;
     }
 
-    // Ties go to the left side.
-    final chosen = meanConfidence(Side.right) > meanConfidence(Side.left)
+    final rightPass = passRate(Side.right), leftPass = passRate(Side.left);
+    final chosen =
+        rightPass > leftPass ||
+            (rightPass == leftPass &&
+                meanConfidence(Side.right) > meanConfidence(Side.left))
         ? Side.right
         : Side.left;
 
@@ -219,6 +276,30 @@ class MeasurementLayer {
     }
     final hl = baseline['heel_left'], hr = baseline['heel_right'];
     if (hl != null && hr != null) baseline['floor'] = (hl + hr) / 2;
+
+    // v0.4: setup thigh and shin lengths of every leg whose joints are
+    // required (the chosen side's required joints plus the both-sides joints).
+    _segments.clear();
+    for (final s in Side.values) {
+      final req = {
+        ...config.bothSidesJoints,
+        if (s == chosen) ...config.requiredJoints,
+      };
+      for (final (j1, j2) in const [
+        (Joint.hip, Joint.knee),
+        (Joint.knee, Joint.ankle),
+      ]) {
+        if (!req.contains(j1) || !req.contains(j2)) continue;
+        final a = landmarkIndex(j1, s), b = landmarkIndex(j2, s);
+        final lengths = [
+          for (final f in _setupFrames)
+            if (f[a] != null && f[b] != null) segmentLength(f[a]!, f[b]!),
+        ];
+        if (lengths.isNotEmpty) {
+          _segments.add((a: a, b: b, length: median(lengths)));
+        }
+      }
+    }
 
     side = chosen;
     _lastJudgedMs = tMs;

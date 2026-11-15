@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:jianfit/engine/geometry.dart';
+import 'package:jianfit/engine/landmarks.dart';
 import 'package:jianfit/engine/smoothing.dart';
 
 Pt _p(dynamic v) => Pt((v[0] as num).toDouble(), (v[1] as num).toDouble());
@@ -85,4 +86,34 @@ void main() {
       }
     }
   });
+
+  // Added in formula v0.4. These run once Member C's front_leg and
+  // plausible_length cases are in test/fixtures/formula_cases.json.
+  const waiting =
+      'Waiting for the v0.4 cases in test/fixtures/formula_cases.json';
+
+  test('front_leg', () {
+    for (final c in cases['front_leg'] as List) {
+      final prev = c['previous'] == null
+          ? null
+          : Side.values.byName(c['previous'] as String);
+      final r = frontLeg(
+        _p(c['left_ankle']),
+        _p(c['right_ankle']),
+        c['facing'] as int,
+        _d(c['L']),
+        prev,
+      );
+      expect(r.name, c['expected']);
+    }
+  }, skip: cases.containsKey('front_leg') ? false : waiting);
+
+  test('plausible_length', () {
+    for (final c in cases['plausible_length'] as List) {
+      expect(
+        plausibleLength(_d(c['length']), _d(c['setup_length'])),
+        c['expected'],
+      );
+    }
+  }, skip: cases.containsKey('plausible_length') ? false : waiting);
 }

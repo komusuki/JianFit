@@ -4,14 +4,21 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-import '../engine/exercise_config.dart';
+import '../engine/form_judge.dart';
 import '../engine/measurement_layer.dart';
 import '../engine/rep_counter.dart';
+import '../models/exercise_definition.dart';
+import '../models/strictness.dart';
+import '../services/exercise_loader.dart';
 import '../services/pose_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/skeleton_painter.dart';
 
 class CameraTestScreen extends StatefulWidget {
-  const CameraTestScreen({super.key});
+  const CameraTestScreen({super.key, this.exerciseId = 'bodyweight_squat'});
+
+  /// Which file in assets/exercises/ to test.
+  final String exerciseId;
 
   @override
   State<CameraTestScreen> createState() => _CameraTestScreenState();
@@ -21,8 +28,10 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
   final _poseService = PoseService();
   final _fpsWatch = Stopwatch();
   final _clock = Stopwatch(); // t_ms for the engine
-  final _layer = MeasurementLayer(squatConfig);
-  final _counter = RepCounter.forExercise(squatConfig);
+  // Set once the exercise file is loaded.
+  ExerciseDefinition? _exercise;
+  MeasurementLayer? _layer;
+  RepCounter? _counter;
   CameraController? _controller;
   CameraDescription? _camera;
   Pose? _pose;
@@ -31,6 +40,8 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
   FrameResult? _frame;
   bool _isPerson = false;
   RepResult? _lastRep;
+  RepVerdict? _lastVerdict;
+  Strictness _strictness = Strictness.standard;
   String _status = 'Starting camera...';
   int _frames = 0;
   int _cameraFrames = 0;
@@ -46,6 +57,26 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
   }
 
   Future<void> _start() async {
+    final loaded = await ExerciseLoader.loadAll();
+    final exercise = loaded.exercises[widget.exerciseId];
+    if (exercise == null) {
+      if (!mounted) return;
+      setState(() {
+        _status =
+            'Could not load ${widget.exerciseId}.json\n'
+            '${loaded.errors.join('\n')}';
+      });
+      return;
+    }
+    _exercise = exercise;
+    _layer = MeasurementLayer(exercise.config);
+    _counter = RepCounter.forExercise(exercise.config);
+    _strictness = await SettingsService.loadStrictness(); // Member B's setting
+    debugPrint(
+      'EXERCISE loaded: ${exercise.id} '
+      '(${loaded.exercises.length} file(s), ${loaded.errors.length} error(s))',
+    );
+
     if (!(await Permission.camera.request()).isGranted) {
       setState(() => _status = 'Camera permission denied');
       return;
@@ -97,37 +128,56 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
   Future<void> _handle(CameraImage image, int tMs) async {
     final controller = _controller;
     final camera = _camera;
-    if (controller == null || camera == null) return;
+    final layer = _layer;
+    final counter = _counter;
+    final exercise = _exercise;
+    if (controller == null ||
+        camera == null ||
+        layer == null ||
+        counter == null ||
+        exercise == null) {
+      return;
+    }
     final orientation = controller.value.deviceOrientation;
     final poses = await _poseService.process(image, camera, orientation);
     if (poses == null || !mounted) return;
     final pose = poses.isEmpty ? null : poses.first;
 
     // Engine: measurement layer, then rep counter.
-    final wasReady = _layer.isReady;
+    final wasReady = layer.isReady;
     final points = PoseService.toPoints(pose);
-    final frame = _layer.process(points, tMs);
-    if (!wasReady && _layer.isReady) {
+    final frame = layer.process(points, tMs);
+    if (!wasReady && layer.isReady) {
       debugPrint(
-        'SETUP done: side=${_layer.side!.name} '
-        'facing=${_layer.facing} baseline=${_layer.baseline}',
+        'SETUP done: side=${layer.side!.name} '
+        'facing=${layer.facing} baseline=${layer.baseline}',
       );
     }
     if (frame.status == FrameStatus.paused) {
       debugPrint('PAUSED: no judgeable frame for 2 s, setup starts again');
-      _counter.reset(keepCount: true);
+      counter.reset(keepCount: true);
     }
     if (frame.status == FrameStatus.judged) {
-      final main = frame.values[squatConfig.mainMeasurement];
+      final main = frame.values[exercise.config.mainMeasurement];
       if (main != null) {
-        final rep = _counter.update(main, frame.values, tMs);
+        final rep = counter.update(main, frame.values, tMs);
         if (rep != null) {
+          final verdict = judgeRep(rep, exercise.formChecks, _strictness);
           _lastRep = rep;
+          _lastVerdict = verdict;
           debugPrint(
-            'REP ${_counter.count}: '
+            'REP ${counter.count}: '
             'deepest=${rep.deepest.toStringAsFixed(1)} '
-            'duration=${rep.durationMs} ms',
+            'duration=${rep.durationMs} ms  '
+            '${_verdictText(verdict)}',
           );
+          for (final r in verdict.results) {
+            debugPrint(
+              '  ${r.check.name}: value=${r.value?.toStringAsFixed(3) ?? '-'} '
+              '${r.check.kind.name} ${r.limit} -> '
+              '${r.passed == null ? 'skipped' : (r.passed! ? 'pass' : 'FAIL')}',
+            );
+          }
         }
       }
     }
@@ -153,16 +203,24 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
       _frame = frame;
       _rotation = _poseService.rotationFor(camera, orientation);
       _imageSize = Size(image.width.toDouble(), image.height.toDouble());
-      _isPerson = _layer.hasPerson(points);
+      _isPerson = layer.hasPerson(points);
     });
   }
 
   void _resetSet() {
     setState(() {
-      _layer.reset();
-      _counter.reset();
+      _layer?.reset();
+      _counter?.reset();
       _lastRep = null;
+      _lastVerdict = null;
     });
+  }
+
+  /// "correct", or "attempted (failed checks)" plus the top cue.
+  static String _verdictText(RepVerdict v) {
+    if (v.correct) return 'correct';
+    final names = v.failed.map((c) => c.name).join(', ');
+    return 'attempted ($names) cue: ${v.topFailed!.cue}';
   }
 
   String _infoText() {
@@ -170,21 +228,28 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
       'FPS: ${_fps.toStringAsFixed(1)}   Pose: ${_isPerson ? 'found' : (_pose == null ? 'none' : 'weak')}',
     ];
     final f = _frame;
-    if (f != null) {
-      final knee = f.values['knee_angle'];
+    final exercise = _exercise;
+    final counter = _counter;
+    if (f != null && exercise != null && counter != null) {
+      final mainName = exercise.config.mainMeasurement;
+      final main = f.values[mainName];
       lines
-        ..add('Status: ${f.status.name}   Side: ${_layer.side?.name ?? '-'}')
+        ..add('${exercise.info.name}   Strictness: ${_strictness.name}')
+        ..add('Status: ${f.status.name}   Side: ${_layer?.side?.name ?? '-'}')
         ..add(
-          'Knee: ${knee == null ? '-' : knee.toStringAsFixed(0)}   '
-          'Stage: ${_counter.stage.name}',
+          '$mainName: ${main == null ? '-' : main.toStringAsFixed(0)}   '
+          'Stage: ${counter.stage.name}',
         )
-        ..add('Reps: ${_counter.count}');
+        ..add('Reps: ${counter.count}');
       final r = _lastRep;
-      if (r != null) {
-        lines.add(
-          'Last rep: deepest ${r.deepest.toStringAsFixed(0)}, '
-          '${(r.durationMs / 1000).toStringAsFixed(1)} s',
-        );
+      final v = _lastVerdict;
+      if (r != null && v != null) {
+        lines
+          ..add(
+            'Last rep: deepest ${r.deepest.toStringAsFixed(0)}, '
+            '${(r.durationMs / 1000).toStringAsFixed(1)} s',
+          )
+          ..add(_verdictText(v));
       }
     }
     return lines.join('\n');

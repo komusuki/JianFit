@@ -4,6 +4,7 @@
 import 'dart:math';
 
 import 'constants.dart';
+import 'landmarks.dart';
 
 /// A landmark in pixels of the upright image, with its confidence (0 to 1).
 class Pt {
@@ -74,4 +75,29 @@ double median(List<double> values) {
   final s = [...values]..sort();
   final m = s.length ~/ 2;
   return s.length.isOdd ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/// Pixel distance between two points (thigh = hip to knee, shin = knee to ankle).
+double segmentLength(Pt a, Pt b) => sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2));
+
+/// False when a segment is more than plausibleLengthChange away from its
+/// setup length (formula v0.4).
+bool plausibleLength(double length, double setupLength) =>
+    (length - setupLength).abs() <= plausibleLengthChange * setupLength;
+
+/// Lunges: the front leg (formula v0.4). It only changes when the ankles are
+/// more than frontLegMargin apart; otherwise [previous] is kept. With no
+/// previous leg (start of a set): left when its ankle is ahead, else right.
+Side frontLeg(
+  Pt leftAnkle,
+  Pt rightAnkle,
+  int facing,
+  double bodyLen, [
+  Side? previous,
+]) {
+  final a = align(leftAnkle, rightAnkle, bodyLen, facing);
+  if (a > frontLegMargin) return Side.left;
+  if (a < -frontLegMargin) return Side.right;
+  if (previous != null) return previous;
+  return a > 0 ? Side.left : Side.right;
 }
