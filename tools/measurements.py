@@ -23,8 +23,9 @@ Usage (from the tools folder, with .venv active):
     python measurements.py "<folder>" --overwrite
 
 The exercise comes from the file name: the part before the first "_"
-(forward-lunge_S01_side_01 -> forward-lunge). Writes <name>_measurements.csv next to
-each pose CSV.
+(forward-lunge_S01_side_01 -> forward-lunge). Video names use hyphens; the app's ids use
+underscores, and exercise_id() converts (forward-lunge -> forward_lunge, knee-push-up ->
+knee_push_up). Writes <name>_measurements.csv next to each pose CSV.
 """
 import argparse
 import csv
@@ -60,9 +61,9 @@ EXERCISES = {
     "jump-squat": dict(pose="standing", side=[SHOULDER, HIP, KNEE, ANKLE], both=[ANKLE],
                        baseline=True, main="knee_angle", direction="dip",
                        measurements=["knee_angle", "jump_rise_left", "jump_rise_right"]),
-    "knee-pushup": dict(_PUSHUP, side=[EAR, SHOULDER, ELBOW, WRIST, HIP, KNEE], end=KNEE),
-    "standard-pushup": _PUSHUP,
-    "decline-pushup": _PUSHUP,
+    "knee-push-up": dict(_PUSHUP, side=[EAR, SHOULDER, ELBOW, WRIST, HIP, KNEE], end=KNEE),
+    "standard-push-up": _PUSHUP,
+    "decline-push-up": _PUSHUP,
     "forward-lunge": _LUNGE,
     "reverse-lunge": _LUNGE,
     "forearm-plank": dict(pose="floor", side=[SHOULDER, ELBOW, HIP, ANKLE], both=[],
@@ -79,6 +80,12 @@ EXERCISES = {
 
 def exercise_from_name(name):
     return name.split("_")[0].lower()
+
+
+def exercise_id(slug):
+    """Video-name slug to the app's exercise id (Member B's ids): forward-lunge -> forward_lunge.
+    Use it to find assets/exercises/<id>.json and tools/tuning/<id>.json."""
+    return slug.replace("-", "_")
 
 
 def read_pose_csv(path):
