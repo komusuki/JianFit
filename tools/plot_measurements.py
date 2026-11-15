@@ -81,9 +81,12 @@ def plot(csv_path, png_path):
     axes[0].legend(loc="upper right", fontsize=8)
     axes[-1].set_xlabel("time (s)")
 
-    judged = (df["status"] != "setup").sum()
+    judged = (~df["status"].isin(["setup", "paused"])).sum()
     pct = 100 * (df["status"] == "ok").sum() / judged if judged else 0
-    fig.suptitle(f"{name}   |   {ex_name}   |   side {df['side'].iloc[0]}, facing {df['facing'].iloc[0]:+d}"
+    known = df[df["side"].notna()]
+    side_txt = (f"side {known['side'].iloc[0]}, facing {int(known['facing'].iloc[0]):+d}"
+                if len(known) else "setup never completed")
+    fig.suptitle(f"{name}   |   {ex_name}   |   {side_txt}"
                  f"   |   judged {pct:.0f}% of frames after setup   (grey = setup or not judged)",
                  fontsize=11)
     fig.tight_layout()

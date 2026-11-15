@@ -1,4 +1,4 @@
-"""JianFit shared formulas: the Python mirror of the Shared Formula Document (v0.2).
+"""JianFit shared formulas: the Python mirror of the Shared Formula Document (v0.4).
 
 Owner of the formulas: Member A. This file only copies them. Every function must stay
 line-for-line equivalent to the Dart engine (lib/engine). To change a formula, one pull
@@ -23,6 +23,12 @@ SMOOTH_RESET_MS = 500     # clear the smoothing buffers after this long with no 
 MIN_BODY_LENGTH_PX = 20   # L below this: person too far away, frame unjudgeable
 VERTICAL_LINE_PX = 1      # below(): a line closer to vertical than this gives "unknown"
 LANDING_WINDOW_MS = 500   # soft landing window after a jump
+# Rep counter (an engine setting, not a formula; lib/engine/constants.dart repTurnaroundDeg).
+REP_TURNAROUND_DEG = 5    # main measurement must move this far back from its deepest value
+# Added in v0.4.
+FRONT_LEG_MARGIN = 0.1         # lunges: the ankles must be this far apart (body lengths) to switch legs
+PLAUSIBLE_MIN_ANGLE_DEG = 30   # a joint angle below this is impossible here: frame unjudgeable
+PLAUSIBLE_LENGTH_CHANGE = 0.4  # thigh or shin length more than 40% off its setup length: unjudgeable
 
 # ---- Landmark numbers (left, right) from the Landmark map section ----
 EAR = (7, 8)
@@ -120,9 +126,28 @@ def back_knee_height(y_floor, back_knee_y, L):
     return (y_floor - back_knee_y) / L
 
 
-def left_is_front(left_ankle, right_ankle, facing, L):
-    """Lunges: the left leg is the front leg when its ankle is further ahead."""
-    return align(left_ankle, right_ankle, facing, L) > 0
+def front_leg(left_ankle, right_ankle, facing, L, previous=None):
+    """Lunges: LEFT or RIGHT. The front leg only changes when the ankles are more than
+    FRONT_LEG_MARGIN apart; otherwise the previous front leg is kept (v0.4).
+    With no previous leg (start of a set): left when its ankle is ahead, otherwise right."""
+    a = align(left_ankle, right_ankle, facing, L)
+    if a > FRONT_LEG_MARGIN:
+        return LEFT
+    if a < -FRONT_LEG_MARGIN:
+        return RIGHT
+    if previous is not None:
+        return previous
+    return LEFT if a > 0 else RIGHT
+
+
+def segment_length(a, b):
+    """Pixel distance between two points (thigh = hip to knee, shin = knee to ankle)."""
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+def plausible_length(length, setup_length):
+    """False when a segment is more than PLAUSIBLE_LENGTH_CHANGE away from its setup length."""
+    return abs(length - setup_length) <= PLAUSIBLE_LENGTH_CHANGE * setup_length
 
 
 # ---- Smoothing ----

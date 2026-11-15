@@ -18,6 +18,7 @@ contourpy==1.4.0
 cycler==0.12.1
 debugpy==1.8.22
 defusedxml==0.7.1
+et_xmlfile==2.0.0
 executing==2.3.0
 fastjsonschema==2.22.3
 flatbuffers==25.12.19
@@ -67,6 +68,7 @@ notebook_shim==0.2.4
 numpy==2.5.4
 opencv-contrib-python==5.0.0.93
 opencv-python==5.0.0.93
+openpyxl==3.1.5
 packaging==26.3
 pandas==3.1.1
 pandocfilters==1.5.1
