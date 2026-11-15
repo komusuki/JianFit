@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/exercise_info.dart';
 import '../models/workout_view.dart';
 import '../services/workout_source.dart';
+import 'live_workout_screen.dart';
 
 // Camera setup check (roadmap Part 10): placement instructions, a body
 // outline, and a 3-2-1 countdown once the source says the person is ready.
@@ -13,10 +14,14 @@ class SetupCheckScreen extends StatefulWidget {
     super.key,
     required this.exercise,
     required this.source,
+    required this.target,
   });
 
   final ExerciseInfo exercise;
   final WorkoutSource source;
+
+  /// Correct reps, or seconds for hold exercises.
+  final int target;
 
   @override
   State<SetupCheckScreen> createState() => _SetupCheckScreenState();
@@ -26,6 +31,7 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
   StreamSubscription<WorkoutView>? _sub;
   Timer? _countdownTimer;
   int? _countdown;
+  bool _handedOver = false;
 
   @override
   void initState() {
@@ -58,11 +64,16 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
 
   void _onCountdownDone() {
     widget.source.beginSet();
-    // Step 8 replaces this with opening the live workout screen.
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.pop(context);
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Live workout screen is not built yet')),
+    _handedOver = true;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LiveWorkoutScreen(
+          exercise: widget.exercise,
+          source: widget.source,
+          target: widget.target,
+        ),
+      ),
     );
   }
 
@@ -77,7 +88,7 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
   void dispose() {
     _countdownTimer?.cancel();
     _sub?.cancel();
-    widget.source.stop();
+    if (!_handedOver) widget.source.stop();
     super.dispose();
   }
 

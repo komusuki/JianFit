@@ -114,8 +114,11 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    SetupCheckScreen(exercise: e, source: FakeWorkoutSource(e)),
+                builder: (_) => SetupCheckScreen(
+                  exercise: e,
+                  source: FakeWorkoutSource(e),
+                  target: _target,
+                ),
               ),
             ),
           ),
