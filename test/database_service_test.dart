@@ -13,10 +13,7 @@ void main() {
   setUpAll(sqfliteFfiInit);
 
   setUp(() {
-    service = DatabaseService(
-      path: inMemoryDatabasePath,
-      factory: databaseFactoryFfi,
-    );
+    service = DatabaseService(path: inMemoryDatabasePath, factory: databaseFactoryFfi);
   });
 
   tearDown(() => service.close());
@@ -26,9 +23,7 @@ void main() {
     correct: fails.isEmpty,
     durationMs: 1800,
     depth: 80,
-    failedChecks: [
-      for (final f in fails) FailedCheck(name: f, category: 'range', value: 1),
-    ],
+    failedChecks: [for (final f in fails) FailedCheck(name: f, category: 'range', value: 1)],
   );
 
   test('saves a session and reads back its summary', () async {
@@ -38,26 +33,16 @@ void main() {
         mode: 'single',
         strictness: 'standard',
         sets: [
-          SetRecord(
-            exerciseId: 'reverse_lunge',
-            setNumber: 1,
-            targetReps: 3,
-            reps: [
-              rep(1),
-              rep(2, fails: ['torso_lean']),
-              rep(3),
-            ],
-          ),
-          SetRecord(
-            exerciseId: 'reverse_lunge',
-            setNumber: 2,
-            targetReps: 3,
-            reps: [
-              rep(1, fails: ['torso_lean', 'knee_past_ankle']),
-              rep(2, fails: ['torso_lean']),
-              rep(3),
-            ],
-          ),
+          SetRecord(exerciseId: 'reverse_lunge', setNumber: 1, targetReps: 3, reps: [
+            rep(1),
+            rep(2, fails: ['torso_lean']),
+            rep(3),
+          ]),
+          SetRecord(exerciseId: 'reverse_lunge', setNumber: 2, targetReps: 3, reps: [
+            rep(1, fails: ['torso_lean', 'knee_past_ankle']),
+            rep(2, fails: ['torso_lean']),
+            rep(3),
+          ]),
         ],
       ),
     );
@@ -68,40 +53,29 @@ void main() {
     expect(s.formAccuracy, closeTo(0.5, 1e-9));
     expect(s.topMistake, 'torso_lean');
     expect(s.topMistakeCount, 3);
-    expect(
-      s.sets.map((x) => [x.setNumber, x.correctReps, x.attemptedReps]).toList(),
-      [
-        [1, 2, 3],
-        [2, 1, 3],
-      ],
-    );
+    expect(s.sets.map((x) => [x.setNumber, x.correctReps, x.attemptedReps]).toList(), [
+      [1, 2, 3],
+      [2, 1, 3],
+    ]);
   });
 
-  test(
-    'summary of a hold-only session has no accuracy and no mistake',
-    () async {
-      final id = await service.saveSession(
-        SessionRecord(
-          startedAt: DateTime(2026, 11, 15, 9),
-          mode: 'single',
-          strictness: 'beginner',
-          sets: const [
-            SetRecord(
-              exerciseId: 'forearm_plank',
-              setNumber: 1,
-              targetSeconds: 30,
-              holdSeconds: 28.5,
-            ),
-          ],
-        ),
-      );
-      final s = (await service.getSummary(id))!;
-      expect(s.attemptedReps, 0);
-      expect(s.formAccuracy, isNull);
-      expect(s.topMistake, isNull);
-      expect(s.sets.single.holdSeconds, 28.5);
-    },
-  );
+  test('summary of a hold-only session has no accuracy and no mistake', () async {
+    final id = await service.saveSession(
+      SessionRecord(
+        startedAt: DateTime(2026, 11, 15, 9),
+        mode: 'single',
+        strictness: 'beginner',
+        sets: const [
+          SetRecord(exerciseId: 'forearm_plank', setNumber: 1, targetSeconds: 30, holdSeconds: 28.5),
+        ],
+      ),
+    );
+    final s = (await service.getSummary(id))!;
+    expect(s.attemptedReps, 0);
+    expect(s.formAccuracy, isNull);
+    expect(s.topMistake, isNull);
+    expect(s.sets.single.holdSeconds, 28.5);
+  });
 
   test('unknown session id gives no summary', () async {
     expect(await service.getSummary(999), isNull);
@@ -115,14 +89,10 @@ void main() {
           mode: 'single',
           strictness: 'standard',
           sets: [
-            SetRecord(
-              exerciseId: 'bodyweight_squat',
-              setNumber: 1,
-              reps: [
-                rep(1),
-                rep(2, fails: ['heel_lift']),
-              ],
-            ),
+            SetRecord(exerciseId: 'bodyweight_squat', setNumber: 1, reps: [
+              rep(1),
+              rep(2, fails: ['heel_lift']),
+            ]),
           ],
         ),
       );
@@ -141,13 +111,7 @@ void main() {
         mode: 'single',
         strictness: 'standard',
         sets: [
-          SetRecord(
-            exerciseId: 'forward_lunge',
-            setNumber: 1,
-            reps: [
-              rep(1, fails: ['torso_lean']),
-            ],
-          ),
+          SetRecord(exerciseId: 'forward_lunge', setNumber: 1, reps: [rep(1, fails: ['torso_lean'])]),
         ],
       ),
     );
@@ -164,24 +128,9 @@ void main() {
       const Routine(
         name: 'Test routine',
         items: [
-          RoutineItem(
-            exerciseId: 'reverse_lunge',
-            targetReps: 8,
-            sets: 2,
-            restSec: 45,
-          ),
-          RoutineItem(
-            exerciseId: 'forearm_plank',
-            targetSeconds: 30,
-            sets: 1,
-            restSec: 60,
-          ),
-          RoutineItem(
-            exerciseId: 'bodyweight_squat',
-            targetReps: 10,
-            sets: 3,
-            restSec: 60,
-          ),
+          RoutineItem(exerciseId: 'reverse_lunge', targetReps: 8, sets: 2, restSec: 45),
+          RoutineItem(exerciseId: 'forearm_plank', targetSeconds: 30, sets: 1, restSec: 60),
+          RoutineItem(exerciseId: 'bodyweight_squat', targetReps: 10, sets: 3, restSec: 60),
         ],
       ),
     );
@@ -195,31 +144,25 @@ void main() {
     expect(routines.single.items[1].targetSeconds, 30);
   });
 
-  test(
-    'fake data: 3 sessions with the expected summaries, added only once',
-    () async {
-      final now = DateTime(2026, 11, 15, 12);
-      expect(await service.seedFakeData(now: now), isTrue);
-      expect(await service.seedFakeData(now: now), isFalse);
+  test('fake data: 3 sessions with the expected summaries, added only once', () async {
+    final now = DateTime(2026, 11, 15, 12);
+    expect(await service.seedFakeData(now: now), isTrue);
+    expect(await service.seedFakeData(now: now), isFalse);
 
-      final list = await service.listSessions();
-      expect(list.length, 3);
-      expect(list.map((x) => [x.correctReps, x.attemptedReps]).toList(), [
-        [9, 12], // yesterday: reverse lunge, strict
-        [14, 16], // 2 days ago: leg day routine (plank has no reps)
-        [16, 20], // 3 days ago: squats
-      ]);
+    final list = await service.listSessions();
+    expect(list.length, 3);
+    expect(list.map((x) => [x.correctReps, x.attemptedReps]).toList(), [
+      [9, 12], // yesterday: reverse lunge, strict
+      [14, 16], // 2 days ago: leg day routine (plank has no reps)
+      [16, 20], // 3 days ago: squats
+    ]);
 
-      final legDay = (await service.getSummary(list[1].id))!;
-      expect(legDay.sets.length, 3);
-      expect(
-        legDay.topMistake,
-        'back_knee_high',
-      ); // 3 checks tied at 1: alphabetical
-      final squats = (await service.getSummary(list[2].id))!;
-      expect(squats.topMistake, 'heel_lift');
-      expect(squats.topMistakeCount, 3);
-      expect((await service.listRoutines()).single.items.length, 3);
-    },
-  );
+    final legDay = (await service.getSummary(list[1].id))!;
+    expect(legDay.sets.length, 3);
+    expect(legDay.topMistake, 'back_knee_high'); // 3 checks tied at 1: alphabetical
+    final squats = (await service.getSummary(list[2].id))!;
+    expect(squats.topMistake, 'heel_lift');
+    expect(squats.topMistakeCount, 3);
+    expect((await service.listRoutines()).single.items.length, 3);
+  });
 }

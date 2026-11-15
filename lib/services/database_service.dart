@@ -271,10 +271,7 @@ class DatabaseService {
   /// Every routine with its items in order, newest routine first.
   Future<List<Routine>> listRoutines() async {
     final db = await database;
-    final routines = await db.query(
-      'routines',
-      orderBy: 'created_at DESC, id DESC',
-    );
+    final routines = await db.query('routines', orderBy: 'created_at DESC, id DESC');
     final result = <Routine>[];
     for (final r in routines) {
       final items = await db.query(
@@ -325,24 +322,9 @@ class DatabaseService {
       const Routine(
         name: 'Leg day (fake)',
         items: [
-          RoutineItem(
-            exerciseId: 'forward_lunge',
-            targetReps: 8,
-            sets: 1,
-            restSec: 60,
-          ),
-          RoutineItem(
-            exerciseId: 'reverse_lunge',
-            targetReps: 8,
-            sets: 1,
-            restSec: 60,
-          ),
-          RoutineItem(
-            exerciseId: 'forearm_plank',
-            targetSeconds: 30,
-            sets: 1,
-            restSec: 60,
-          ),
+          RoutineItem(exerciseId: 'forward_lunge', targetReps: 8, sets: 1, restSec: 60),
+          RoutineItem(exerciseId: 'reverse_lunge', targetReps: 8, sets: 1, restSec: 60),
+          RoutineItem(exerciseId: 'forearm_plank', targetSeconds: 30, sets: 1, restSec: 60),
         ],
       ),
     );
@@ -354,14 +336,8 @@ class DatabaseService {
         mode: 'single',
         strictness: 'standard',
         sets: [
-          _fakeSet('bodyweight_squat', 1, 10, {
-            4: ['heel_lift'],
-          }),
-          _fakeSet('bodyweight_squat', 2, 10, {
-            6: ['heel_lift'],
-            8: ['torso_lean'],
-            9: ['heel_lift'],
-          }),
+          _fakeSet('bodyweight_squat', 1, 10, {4: ['heel_lift']}),
+          _fakeSet('bodyweight_squat', 2, 10, {6: ['heel_lift'], 8: ['torso_lean'], 9: ['heel_lift']}),
         ],
       ),
     );
@@ -373,17 +349,9 @@ class DatabaseService {
         routineId: legDay,
         strictness: 'standard',
         sets: [
-          _fakeSet('forward_lunge', 1, 8, {
-            3: ['torso_lean'],
-            7: ['shallow_front_knee', 'back_knee_high'],
-          }),
+          _fakeSet('forward_lunge', 1, 8, {3: ['torso_lean'], 7: ['shallow_front_knee', 'back_knee_high']}),
           _fakeSet('reverse_lunge', 1, 8, const {}),
-          const SetRecord(
-            exerciseId: 'forearm_plank',
-            setNumber: 1,
-            targetSeconds: 30,
-            holdSeconds: 27.5,
-          ),
+          const SetRecord(exerciseId: 'forearm_plank', setNumber: 1, targetSeconds: 30, holdSeconds: 27.5),
         ],
       ),
     );
@@ -394,13 +362,8 @@ class DatabaseService {
         mode: 'single',
         strictness: 'strict',
         sets: [
-          _fakeSet('reverse_lunge', 1, 6, {
-            2: ['knee_past_ankle'],
-          }),
-          _fakeSet('reverse_lunge', 2, 6, {
-            4: ['knee_past_ankle'],
-            6: ['knee_past_ankle'],
-          }),
+          _fakeSet('reverse_lunge', 1, 6, {2: ['knee_past_ankle']}),
+          _fakeSet('reverse_lunge', 2, 6, {4: ['knee_past_ankle'], 6: ['knee_past_ankle']}),
         ],
       ),
     );
@@ -428,10 +391,7 @@ class DatabaseService {
             durationMs: 2000,
             endedAtMs: n * 3000,
             frontLeg: lunge ? (n.isOdd ? 'L' : 'R') : null,
-            failedChecks: [
-              for (final c in fails[n] ?? const <String>[])
-                FailedCheck(name: c),
-            ],
+            failedChecks: [for (final c in fails[n] ?? const <String>[]) FailedCheck(name: c)],
           ),
       ],
     );
