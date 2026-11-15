@@ -4,25 +4,29 @@ import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/exercise_info.dart';
+import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 import '../services/workout_source.dart';
+import '../widgets/rest_view.dart';
 
-// Live workout screen (roadmap Part 10): camera preview, rep result color,
-// correct and attempted counters, cue banner, hold timer, Pause and Stop.
-// Reads only WorkoutView, so the fake source and the engine both fit.
+// Live workout screen (roadmap Part 10) for every set of one exercise:
+// counters, cue banner, rep result color, Pause and Stop, then rest between
+// sets (RestView) and a summary at the end. Reads only WorkoutView, so the
+// fake source and the engine both fit.
 class LiveWorkoutScreen extends StatefulWidget {
   const LiveWorkoutScreen({
     super.key,
     required this.exercise,
     required this.source,
-    required this.target,
+    required this.plan,
   });
 
   final ExerciseInfo exercise;
   final WorkoutSource source;
 
-  /// Correct reps, or seconds for hold exercises.
-  final int target;
+  /// Target per set, number of sets and rest (Member C's RoutineItem, so a
+  /// routine is just a list of these).
+  final RoutineItem plan;
 
   @override
   State<LiveWorkoutScreen> createState() => _LiveWorkoutScreenState();
@@ -30,23 +34,50 @@ class LiveWorkoutScreen extends StatefulWidget {
 
 class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
   StreamSubscription<WorkoutView>? _sub;
-  bool _setDone = false;
+  int _setNumber = 1;
+  bool _resting = false;
+  bool _finished = false;
+  final _results = <String>[];
 
   bool get _isHold => widget.exercise.type == ExerciseType.hold;
+
+  int get _target =>
+      (_isHold ? widget.plan.targetSeconds : widget.plan.targetReps) ?? 0;
 
   @override
   void initState() {
     super.initState();
     WakelockPlus.enable();
-    _sub = widget.source.updates.listen((v) {
-      final reached = _isHold
-          ? v.holdSeconds >= widget.target
-          : v.correct >= widget.target;
-      if (reached && !_setDone) {
-        widget.source.pause();
-        setState(() => _setDone = true);
+    _sub = widget.source.updates.listen(_onUpdate);
+  }
+
+  void _onUpdate(WorkoutView v) {
+    // While resting or paused, the counts still belong to the set that ended.
+    if (_resting || _finished || v.paused) return;
+    final reached = _isHold ? v.holdSeconds >= _target : v.correct >= _target;
+    if (!reached) return;
+    widget.source.pause();
+    _results.add(_summary(v));
+    setState(() {
+      if (_setNumber < widget.plan.sets) {
+        _resting = true;
+      } else {
+        _finished = true;
       }
     });
+  }
+
+  String _summary(WorkoutView v) => _isHold
+      ? '${v.holdSeconds.floor()} seconds held'
+      : '${v.correct} correct of ${v.attempted} attempted';
+
+  void _startNextSet() {
+    setState(() {
+      _resting = false;
+      _setNumber++;
+    });
+    widget.source.resume();
+    widget.source.beginSet();
   }
 
   @override
@@ -61,7 +92,11 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(title: Text(widget.exercise.name)),
+      appBar: AppBar(
+        title: Text(
+          '${widget.exercise.name}, set $_setNumber of ${widget.plan.sets}',
+        ),
+      ),
       body: StreamBuilder<WorkoutView>(
         stream: widget.source.updates,
         initialData: widget.source.current,
@@ -91,7 +126,7 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _Counters(view: v, isHold: _isHold, target: widget.target),
+                    _Counters(view: v, isHold: _isHold, target: _target),
                     if (v.cue != null) ...[
                       const SizedBox(height: 8),
                       _CueBanner(cue: v.cue!),
@@ -99,8 +134,16 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                   ],
                 ),
               ),
-              if (v.paused && !_setDone)
+              if (v.paused && !_resting && !_finished)
                 _PausedOverlay(personVisible: v.personVisible),
+              if (_resting)
+                RestView(
+                  key: ValueKey(_setNumber),
+                  seconds: widget.plan.restSec,
+                  lastSet: _results.last,
+                  next: 'Set ${_setNumber + 1} of ${widget.plan.sets}',
+                  onDone: _startNextSet,
+                ),
               Positioned(
                 left: 16,
                 right: 16,
@@ -111,9 +154,11 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                       child: FilledButton.tonalIcon(
                         icon: Icon(v.paused ? Icons.play_arrow : Icons.pause),
                         label: Text(v.paused ? 'Resume' : 'Pause'),
-                        onPressed: v.paused
+                        onPressed: _resting
+                            ? null
+                            : (v.paused
                             ? widget.source.resume
-                            : widget.source.pause,
+                            : widget.source.pause),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -130,11 +175,9 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                   ],
                 ),
               ),
-              if (_setDone)
-                _SetDoneOverlay(
-                  summary: _isHold
-                      ? '${v.holdSeconds.floor()} seconds held'
-                      : '${v.correct} correct of ${v.attempted} attempted',
+              if (_finished)
+                _FinishedOverlay(
+                  results: _results,
                   onDone: () => Navigator.pop(context),
                 ),
             ],
@@ -261,10 +304,10 @@ class _PausedOverlay extends StatelessWidget {
   }
 }
 
-class _SetDoneOverlay extends StatelessWidget {
-  const _SetDoneOverlay({required this.summary, required this.onDone});
+class _FinishedOverlay extends StatelessWidget {
+  const _FinishedOverlay({required this.results, required this.onDone});
 
-  final String summary;
+  final List<String> results;
   final VoidCallback onDone;
 
   @override
@@ -278,11 +321,15 @@ class _SetDoneOverlay extends StatelessWidget {
             const Icon(Icons.check_circle, size: 72, color: Colors.greenAccent),
             const SizedBox(height: 12),
             const Text(
-              'Set complete',
+              'Workout complete',
               style: TextStyle(color: Colors.white, fontSize: 28),
             ),
-            const SizedBox(height: 4),
-            Text(summary, style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 12),
+            for (var i = 0; i < results.length; i++)
+              Text(
+                'Set ${i + 1}: ${results[i]}',
+                style: const TextStyle(color: Colors.white70),
+              ),
             const SizedBox(height: 24),
             FilledButton(onPressed: onDone, child: const Text('Done')),
           ],
