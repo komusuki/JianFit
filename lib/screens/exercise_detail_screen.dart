@@ -5,6 +5,7 @@ import '../models/strictness.dart';
 import '../services/settings_service.dart';
 import '../services/fake_workout_source.dart';
 import 'setup_check_screen.dart';
+import '../models/workout_records.dart';
 
 class ExerciseDetailScreen extends StatefulWidget {
   const ExerciseDetailScreen({super.key, required this.exercise});
@@ -117,7 +118,13 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                 builder: (_) => SetupCheckScreen(
                   exercise: e,
                   source: FakeWorkoutSource(e),
-                  target: _target,
+                  plan: RoutineItem(
+                    exerciseId: e.id,
+                    targetReps: _isHold ? null : _target,
+                    targetSeconds: _isHold ? _target : null,
+                    sets: _sets,
+                    restSec: _restSeconds,
+                  ),
                 ),
               ),
             ),

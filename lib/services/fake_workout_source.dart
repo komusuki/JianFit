@@ -107,7 +107,16 @@ class FakeWorkoutSource implements WorkoutSource {
   }
 
   @override
-  void beginSet() => _counting = true;
+  void beginSet() {
+    _correct = 0;
+    _attempted = 0;
+    _hold = 0;
+    _cue = null;
+    _lastRepCorrect = null;
+    _awayUntil = -1;
+    _manualPause = false;
+    _counting = true;
+  }
 
   @override
   void pause() => _manualPause = true;
