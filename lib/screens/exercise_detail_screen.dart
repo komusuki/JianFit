@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/exercise_info.dart';
 import '../models/strictness.dart';
 import '../services/settings_service.dart';
+import '../services/fake_workout_source.dart';
+import 'setup_check_screen.dart';
 
 class ExerciseDetailScreen extends StatefulWidget {
   const ExerciseDetailScreen({super.key, required this.exercise});
@@ -109,9 +111,14 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
           FilledButton.icon(
             icon: const Icon(Icons.play_arrow),
             label: const Text('Start'),
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Camera setup check is not built yet'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SetupCheckScreen(
+                  exercise: e,
+                  source: FakeWorkoutSource(e),
+                  target: _target,
+                ),
               ),
             ),
           ),
