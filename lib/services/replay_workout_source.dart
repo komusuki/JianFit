@@ -184,7 +184,8 @@ class ReplayWorkoutSource implements WorkoutSource {
             left: 8,
             bottom: 8,
             child: Text(
-              _message ?? 'REPLAY  ${((f?.tMs ?? 0) / 1000).toStringAsFixed(1)} s',
+              _message ??
+                  'REPLAY  ${((f?.tMs ?? 0) / 1000).toStringAsFixed(1)} s',
               style: const TextStyle(color: Colors.white70),
             ),
           ),
@@ -233,9 +234,26 @@ class ReplayPointsPainter extends CustomPainter {
   final ReplayFrame frame;
 
   static const _bones = [
-    (7, 11), (8, 12), (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
-    (11, 23), (12, 24), (23, 24), (23, 25), (25, 27), (24, 26), (26, 28),
-    (27, 29), (29, 31), (27, 31), (28, 30), (30, 32), (28, 32),
+    (7, 11),
+    (8, 12),
+    (11, 12),
+    (11, 13),
+    (13, 15),
+    (12, 14),
+    (14, 16),
+    (11, 23),
+    (12, 24),
+    (23, 24),
+    (23, 25),
+    (25, 27),
+    (24, 26),
+    (26, 28),
+    (27, 29),
+    (29, 31),
+    (27, 31),
+    (28, 30),
+    (30, 32),
+    (28, 32),
   ];
 
   @override

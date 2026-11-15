@@ -23,3 +23,9 @@ const double plausibleMinAngleDeg = 30; // PLAUSIBLE_MIN_ANGLE_DEG
 const double plausibleLengthChange = 0.4; // PLAUSIBLE_LENGTH_CHANGE
 // A rep shorter than this (leaving Ready to Complete) is dropped. Engine setting.
 const int minRepMs = 500; // MIN_REP_MS
+
+// Added in formula v0.5.
+// Setup restarts when a required joint moves more than this many body lengths
+// from where it was at the start of the window (only for exercises without
+// both-sides joints; see the formula document).
+const double stillMaxMove = 0.1; // STILL_MAX_MOVE

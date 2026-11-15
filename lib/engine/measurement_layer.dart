@@ -108,17 +108,40 @@ class MeasurementLayer {
     return p != null && p.c >= minConfidence;
   }
 
-  /// True when the required joints pass the confidence check on at least
-  /// one side, and the both-sides joints pass on both sides. Weak false
-  /// detections (for example on a chair) fail this.
+  /// True when an ear passes the confidence check (v0.5: a chair has no
+  /// head), the required joints pass on at least one side, and the
+  /// both-sides joints pass on both sides. Weak false detections (for
+  /// example on a chair) fail this.
   bool hasPerson(Map<int, Pt> lm) {
+    final headOk = Side.values.any((s) => _passes(lm, Joint.ear, s));
     final bothOk = config.bothSidesJoints.every(
       (j) => _passes(lm, j, Side.left) && _passes(lm, j, Side.right),
     );
     final sideOk = Side.values.any(
       (s) => config.requiredJoints.every((j) => _passes(lm, j, s)),
     );
-    return bothOk && sideOk;
+    return headOk && bothOk && sideOk;
+  }
+
+  /// v0.5: true when a required joint, shoulder or hip of a side that passes
+  /// in both frames is more than stillMaxMove body lengths from where it was
+  /// in [first].
+  bool _moved(Map<int, Pt> first, Map<int, Pt> lm) {
+    final joints = {...config.requiredJoints, Joint.shoulder, Joint.hip};
+    for (final s in Side.values) {
+      if (!joints.every((j) => _passes(first, j, s) && _passes(lm, j, s))) {
+        continue;
+      }
+      final len = bodyLength(
+        first[landmarkIndex(Joint.shoulder, s)]!,
+        first[landmarkIndex(Joint.hip, s)]!,
+      );
+      for (final j in joints) {
+        final i = landmarkIndex(j, s);
+        if (segmentLength(first[i]!, lm[i]!) > stillMaxMove * len) return true;
+      }
+    }
+    return false;
   }
 
   /// Start a new set: forget side, facing, baseline, setup lengths and
@@ -210,13 +233,23 @@ class MeasurementLayer {
   }
 
   // Setup window: the first baselineMs in which a person passes hasPerson
-  // (the rule for recorded videos). Once Member B's countdown exists,
+  // and, without both-sides joints, stands still (the rule for recorded
+  // videos). Once Member B's countdown exists,
   // call reset() when its last second starts instead.
   FrameResult _setup(Map<int, Pt> lm, int tMs) {
     if (!hasPerson(lm)) {
       _setupFrames.clear();
       _setupStartMs = null;
       return FrameResult(FrameStatus.setup, tMs);
+    }
+    // v0.5: without both-sides joints the person must also stand still, so
+    // the baseline is not taken while walking into place. Lunges and the jump
+    // squat skip this (v0.4.1: the far leg hides when the feet are together).
+    if (config.bothSidesJoints.isEmpty &&
+        _setupFrames.isNotEmpty &&
+        _moved(_setupFrames.first, lm)) {
+      _setupFrames.clear();
+      _setupStartMs = null;
     }
     _setupStartMs ??= tMs;
     _setupFrames.add(lm);

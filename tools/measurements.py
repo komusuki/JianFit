@@ -110,13 +110,30 @@ def confident(p, *joints):
 
 
 def is_setup_frame(p, ex):
-    """A setup frame has every required joint at MIN_CONFIDENCE or more on at least one
-    side, plus the joints required on both sides (both legs for lunges). Document v0.3."""
+    """A setup frame has an ear at MIN_CONFIDENCE or more (v0.5: a chair has no head), every
+    required joint at MIN_CONFIDENCE or more on at least one side, plus the joints required
+    on both sides (both legs for lunges). Document v0.3 and v0.5."""
     if p is None:
         return False
+    head_ok = any(confident(p, EAR[s]) for s in (LEFT, RIGHT))
     both_ok = confident(p, *[j[k] for j in ex["both"] for k in (LEFT, RIGHT)])
     side_ok = any(confident(p, *[j[s] for j in ex["side"]]) for s in (LEFT, RIGHT))
-    return both_ok and side_ok
+    return head_ok and both_ok and side_ok
+
+
+def moved(first, p, ex):
+    """v0.5: a required joint, shoulder or hip of a side that passes in both frames is more
+    than STILL_MAX_MOVE body lengths from where it was in the first setup frame
+    (measurement_layer.dart _moved)."""
+    joints = list(dict.fromkeys(ex["side"] + [SHOULDER, HIP]))
+    for s in (LEFT, RIGHT):
+        idx = [j[s] for j in joints]
+        if not (confident(first, *idx) and confident(p, *idx)):
+            continue
+        L = f.body_length(first[SHOULDER[s]], first[HIP[s]])
+        if any(f.segment_length(first[i], p[i]) > f.STILL_MAX_MOVE * L for i in idx):
+            return True
+    return False
 
 
 SETUP_BENT_DEG = 150   # tool-only warning: main angle this low during setup means "not standing"
@@ -276,6 +293,9 @@ def process(pose_csv, out_csv, ex_name):
             if not is_setup_frame(p, ex):
                 setup_frames, setup_start = [], None
             else:
+                # v0.5: without both-sides joints the person must also stand still.
+                if not ex["both"] and setup_frames and moved(setup_frames[0], p, ex):
+                    setup_frames, setup_start = [], None
                 setup_start = t if setup_start is None else setup_start
                 setup_frames.append(p)
                 if t - setup_start >= f.BASELINE_MS:
@@ -329,7 +349,8 @@ def process(pose_csv, out_csv, ex_name):
 
     if not setups:
         print(f"    Setup never completed: no {f.BASELINE_MS} ms in a row with")
-        print("    the required joints visible (confidence 0.5+). Skipped. Check the _summary.txt and the video.")
+        print("    an ear and the required joints visible (confidence 0.5+), standing still unless both")
+        print("    legs are required. Skipped. Check the _summary.txt and the video.")
         return None
     with open(out_csv, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols)

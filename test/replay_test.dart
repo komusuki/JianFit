@@ -42,11 +42,19 @@ void main() {
 
   test('the exercise id comes from the file name', () {
     expect(
-      exerciseIdFromReplayName('assets/replays/reverse-lunge_S01_side_correct_01.csv'),
+      exerciseIdFromReplayName(
+        'assets/replays/reverse-lunge_S01_side_correct_01.csv',
+      ),
       'reverse_lunge',
     );
-    expect(exerciseIdFromReplayName('knee-push-up_S02_side_01.csv'), 'knee_push_up');
-    expect(exerciseIdFromReplayName('bodyweight-squat_S01_side_01.csv'), 'bodyweight_squat');
+    expect(
+      exerciseIdFromReplayName('knee-push-up_S02_side_01.csv'),
+      'knee_push_up',
+    );
+    expect(
+      exerciseIdFromReplayName('bodyweight-squat_S01_side_01.csv'),
+      'bodyweight_squat',
+    );
   });
 
   test('same reps as tools/replay_check.py on the synthetic squat clip', () {
@@ -64,10 +72,11 @@ void main() {
     for (final (rep, _) in runner.reps) {
       expect(rep.deepest, closeTo(90.5, 0.5));
     }
-    expect(
-      runner.reps.map((r) => r.$1.endMs / 1000).toList(),
-      [closeTo(3.40, 0.05), closeTo(5.60, 0.05), closeTo(7.30, 0.05)],
-    );
+    expect(runner.reps.map((r) => r.$1.endMs / 1000).toList(), [
+      closeTo(3.40, 0.05),
+      closeTo(5.60, 0.05),
+      closeTo(7.30, 0.05),
+    ]);
   });
 
   test('before the set begins, setup runs but no reps are counted', () {

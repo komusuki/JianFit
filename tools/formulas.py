@@ -30,6 +30,8 @@ MIN_REP_MS = 500          # v0.4.2: a rep shorter than this (leaving Ready to Co
 FRONT_LEG_MARGIN = 0.1         # lunges: the ankles must be this far apart (body lengths) to switch legs
 PLAUSIBLE_MIN_ANGLE_DEG = 30   # a joint angle below this is impossible here: frame unjudgeable
 PLAUSIBLE_LENGTH_CHANGE = 0.4  # thigh or shin length more than 40% off its setup length: unjudgeable
+# Added in v0.5.
+STILL_MAX_MOVE = 0.1          # setup restarts when a required joint moves more than this (body lengths)
 
 # ---- Landmark numbers (left, right) from the Landmark map section ----
 EAR = (7, 8)

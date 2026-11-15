@@ -52,7 +52,8 @@ List<ReplayFrame> parseReplayCsv(String text) {
   final iFrame = col('frame'), iT = col('t_ms');
   final iW = col('width'), iH = col('height');
   final lm = [
-    for (var k = 0; k < 33; k++) (col('lm${k}_x'), col('lm${k}_y'), col('lm${k}_c')),
+    for (var k = 0; k < 33; k++)
+      (col('lm${k}_x'), col('lm${k}_y'), col('lm${k}_c')),
   ];
 
   final frames = <ReplayFrame>[];
