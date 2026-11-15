@@ -125,7 +125,13 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                   source: _replay
                       ? ReplayWorkoutSource(e, strictness: _strictness)
                       : FakeWorkoutSource(e),
-                  target: _target,
+                  plan: RoutineItem(
+                    exerciseId: e.id,
+                    targetReps: _isHold ? null : _target,
+                    targetSeconds: _isHold ? _target : null,
+                    sets: _sets,
+                    restSec: _restSeconds,
+                  ),
                 ),
               ),
             ),
