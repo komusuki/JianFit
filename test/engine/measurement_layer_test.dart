@@ -4,6 +4,8 @@ import 'package:jianfit/engine/geometry.dart';
 import 'package:jianfit/engine/landmarks.dart';
 import 'package:jianfit/engine/measurement_layer.dart';
 
+import 'squat_config.dart';
+
 /// A person standing straight, facing right. Left side is more confident.
 Map<int, Pt> standingFrame() {
   final m = <int, Pt>{};

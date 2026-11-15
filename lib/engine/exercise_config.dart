@@ -7,7 +7,7 @@ enum Posture { standing, floor }
 enum Direction { dip, hill }
 
 /// What the engine needs to know about one exercise.
-/// From Day 5, these values are loaded from assets/exercises/*.json.
+/// Loaded from assets/exercises/*.json (see lib/models/exercise_definition.dart).
 class ExerciseConfig {
   const ExerciseConfig({
     required this.id,
@@ -42,17 +42,3 @@ class ExerciseConfig {
   /// A rep completes when it comes back past this value.
   final double completeThreshold;
 }
-
-/// Temporary until the exercise file loader (Day 5).
-/// Thresholds are the roadmap's starting values (Part 5); tune them with
-/// the replay plots.
-const squatConfig = ExerciseConfig(
-  id: 'bodyweight_squat',
-  posture: Posture.standing,
-  requiredJoints: [Joint.shoulder, Joint.hip, Joint.knee, Joint.ankle],
-  measurements: ['knee_angle', 'hip_angle', 'torso_lean', 'heel_lift'],
-  mainMeasurement: 'knee_angle',
-  direction: Direction.dip,
-  startThreshold: 150,
-  completeThreshold: 160,
-);
