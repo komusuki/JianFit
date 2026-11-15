@@ -11,8 +11,14 @@ Usage (from the tools folder, with .venv active):
     python replay_check.py "<folder>" --exercise forward-lunge        # no labels: list detected reps
 
 Labels: download the Google Sheet as .xlsx (File > Download > Microsoft Excel). The Videos
-tab links video_id to file_name; the Reps tab holds one row per rep. Reps whose notes
-contain "exclude" are left out of form agreement (they still count as reps).
+tab links video_id to file_name. The Reps tab takes two kinds of rows, and a video can mix them:
+  one rep:     start_sec to end_sec covers one rep (RANGE_MIN_SEC or shorter); matched to the
+               detected rep it overlaps most.
+  whole clip:  start_sec to end_sec covers many reps (longer than RANGE_MIN_SEC) and rep_number
+               is HOW MANY reps are in it. Every detected rep whose middle falls in the range
+               gets that row's label, and the count is compared with rep_number. Detected reps
+               outside every range are listed but not counted. Side accuracy is skipped.
+Reps whose notes contain "exclude" are left out of form agreement (they still count as reps).
 
 Scores (written to the console and to replay_results_<exercise>.csv in the csv folder):
   count accuracy  = 1 - sum over videos of |detected - labeled| / total labeled   (target 95%)
@@ -32,6 +38,7 @@ from rep_counter import RepCounter
 
 TUNING_DIR = Path(__file__).parent / "tuning"
 TARGET_COUNT, TARGET_FORM = 95, 85
+RANGE_MIN_SEC = 8   # a label row longer than this is a whole-clip row (no single rep lasts this long)
 SIDE_NAMES = {"L": "Left", "R": "Right"}
 
 
@@ -135,6 +142,21 @@ def match(detected, labeled):
     return matches
 
 
+def is_range(lab):
+    return lab["end_ms"] - lab["start_ms"] > RANGE_MIN_SEC * 1000
+
+
+def range_count(lab):
+    """A whole-clip row's rep_number is the number of reps in it."""
+    n = to_float(lab["rep_number"])
+    return int(n) if n is not None else None
+
+
+def in_range(rep, lab):
+    mid = (rep.start_ms + rep.end_ms) / 2
+    return lab["start_ms"] <= mid <= lab["end_ms"]
+
+
 def pct(a, b):
     return 100 * a / b if b else float("nan")
 
@@ -194,14 +216,41 @@ def main():
             print()
             continue
 
-        matches = match(reps, labeled)
-        s = dict(labeled=len(labeled), detected=len(reps), matched=len(matches),
+        ranges = [lab for lab in labeled if is_range(lab)]
+        singles = [lab for lab in labeled if not is_range(lab)]
+        bad = [lab for lab in ranges if range_count(lab) is None]
+        if bad:
+            sys.exit(f"{stem}: a whole-clip label row ({bad[0]['start_ms'] / 1000:g} to "
+                     f"{bad[0]['end_ms'] / 1000:g} s) needs the number of reps in rep_number.")
+        # Detected reps inside a whole-clip range belong to it; the rest are matched to single rows.
+        owner = {}
+        for i, r in enumerate(reps):
+            for k, lab in enumerate(ranges):
+                if in_range(r, lab):
+                    owner[i] = k
+                    break
+        free = [i for i in range(len(reps)) if i not in owner]
+        sub = match([reps[i] for i in free], singles)
+        matches = {j: free[i] for j, i in sub.items()}
+        pairs = [(lab, matches.get(j)) for j, lab in enumerate(singles)]
+        for k, lab in enumerate(ranges):
+            in_k = [i for i in sorted(owner) if owner[i] == k]
+            pairs += [(lab, i) for i in in_k]
+            n_lab, n_det = range_count(lab), len(in_k)
+            print(f"    {lab['start_ms'] / 1000:g} to {lab['end_ms'] / 1000:g} s, {lab['label'] or 'no label'}: "
+                  f"labeled {n_lab} reps, detected {n_det}")
+        outside = [i for i in free if i not in matches.values()]
+        labeled_count = len(singles) + sum(range_count(lab) for lab in ranges)
+        # Reps outside every range only count as extras when the video also has single-rep rows.
+        counted_extra = len(outside) if singles else 0
+        detected_count = len(matches) + len(owner) + counted_extra
+        s = dict(labeled=labeled_count, detected=detected_count, matched=len(matches) + len(owner),
                  form_judged=0, form_agree=0, side_judged=0, side_agree=0)
-        for j, lab in enumerate(labeled):
+        for lab, i in pairs:
+            whole = is_range(lab)
             row = dict(video=stem, subject=subject, label_rep=lab["rep_number"], label_side=lab["side"],
                        label_start_sec=lab["start_ms"] / 1000, label_end_sec=lab["end_ms"] / 1000,
                        label=lab["label"], notes=lab["notes"])
-            i = matches.get(j)
             if i is None:
                 row["result"] = "missed (no rep detected)"
                 results.append(row)
@@ -232,25 +281,25 @@ def main():
                         st["false_on_correct" if label == "correct" else "false_on_other"] += 1
             else:
                 row["result"] = "excluded from form agreement"
-            if leg and lab["side"] in ("Left", "Right"):
+            if leg and lab["side"] in ("Left", "Right") and not whole:
                 s["side_judged"] += 1
                 s["side_agree"] += leg == lab["side"]
             results.append(row)
-        for i, (r, (fired, _)) in enumerate(zip(reps, verdicts)):
-            if i not in matches.values():
-                results.append(dict(video=stem, subject=subject, detected_rep=i + 1,
-                                    detected_start_sec=round(r.start_ms / 1000, 2),
-                                    detected_end_sec=round(r.end_ms / 1000, 2),
-                                    deepest=round(r.deepest, 2), fired=";".join(fired),
-                                    result="extra (no label)"))
+        for i in outside:
+            r, (fired, _) = reps[i], verdicts[i]
+            results.append(dict(video=stem, subject=subject, detected_rep=i + 1,
+                                detected_start_sec=round(r.start_ms / 1000, 2),
+                                detected_end_sec=round(r.end_ms / 1000, 2),
+                                deepest=round(r.deepest, 2), fired=";".join(fired),
+                                result="extra (no label)" if singles else "outside labeled time (not counted)"))
 
         s["count_error"] = abs(s["detected"] - s["labeled"])
         for bucket in (totals, per_subject.setdefault(subject, {})):
             for k, v in s.items():
                 bucket[k] = bucket.get(k, 0) + v
         side_txt = f" | side {s['side_agree']}/{s['side_judged']}" if s["side_judged"] else ""
-        print(f"    labeled {s['labeled']}, detected {s['detected']}, matched {s['matched']} "
-              f"(missed {s['labeled'] - s['matched']}, extra {s['detected'] - s['matched']}) | "
+        out_txt = f", {len(outside)} outside labeled time" if outside and not singles else ""
+        print(f"    labeled {s['labeled']}, detected {s['detected']}{out_txt} | "
               f"form agree {s['form_agree']}/{s['form_judged']}{side_txt}\n")
 
     out_csv = folder / f"replay_results_{args.exercise}.csv"

@@ -9,10 +9,13 @@ Roadmap stages -> this code:
   Bottom     -> the moment the value turns back by REP_TURNAROUND_DEG
   Coming Up  -> COMING_UP
   Complete   -> the moment update() returns a RepResult
+A rep that completes in under MIN_REP_MS is dropped without counting (v0.4.2): real reps take
+longer, and these short ones come from the measurement jumping, for example when a lunge's
+front leg switches during the step.
 """
 from dataclasses import dataclass, field
 
-from formulas import REP_TURNAROUND_DEG
+from formulas import MIN_REP_MS, REP_TURNAROUND_DEG
 
 READY, GOING_DOWN, COMING_UP = "ready", "goingDown", "comingUp"
 
@@ -31,13 +34,14 @@ class RepResult:
 
 class RepCounter:
     def __init__(self, direction, start_threshold, complete_threshold,
-                 turnaround=REP_TURNAROUND_DEG):
+                 turnaround=REP_TURNAROUND_DEG, min_rep_ms=MIN_REP_MS):
         assert (complete_threshold > start_threshold if direction == "dip"
                 else complete_threshold < start_threshold)
         self.direction = direction
         self.start_threshold = start_threshold
         self.complete_threshold = complete_threshold
         self.turnaround = turnaround
+        self.min_rep_ms = min_rep_ms
         self.stage = READY
         self.count = 0
         self._extreme = None
@@ -67,6 +71,9 @@ class RepCounter:
             return None
 
         if self._returned(main):
+            if t_ms - self._start_ms < self.min_rep_ms:
+                self.reset(keep_count=True)     # too short to be a rep: drop it
+                return None
             self.count += 1
             result = RepResult(deepest=self._extreme, at_deepest=self._at_extreme,
                                duration_ms=t_ms - self._start_ms, end_ms=t_ms)

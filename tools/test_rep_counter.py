@@ -33,7 +33,7 @@ def test_jitter_between_thresholds_is_not_a_rep():
 def test_hysteresis_small_dip_still_counts():
     # Below 150 then above 160 counts, however small the dip (by design of the two thresholds).
     c = RepCounter("dip", 150, 160)
-    reps = feed(c, [170, 149, 155, 161])
+    reps = feed(c, [170, 149, 155, 161], step_ms=300)
     assert c.count == 1 and reps[0].deepest == 149
 
 
@@ -45,7 +45,7 @@ def test_stuck_between_thresholds_waits():
 
 def test_two_reps():
     c = RepCounter("dip", 150, 160)
-    reps = feed(c, [175, 120, 80, 120, 170, 175, 130, 70, 130, 171])
+    reps = feed(c, [175, 120, 80, 120, 170, 175, 130, 70, 130, 171], step_ms=250)
     assert c.count == 2 and [r.deepest for r in reps] == [80, 70]
 
 
@@ -71,6 +71,16 @@ def test_reset_drops_rep_in_progress():
     c.reset(keep_count=True)
     feed(c, [165, 170])
     assert c.count == 0 and c.stage == READY
+
+
+def test_too_short_rep_is_dropped():
+    # Below 150 and back above 160 within 300 ms (under MIN_REP_MS = 500): not a rep.
+    c = RepCounter("dip", 150, 160)
+    reps = feed(c, [175, 145, 165, 175], step_ms=150)
+    assert c.count == 0 and not reps and c.stage == READY
+    # The real rep right after it still counts.
+    reps = feed(c, [175, 140, 100, 80, 100, 140, 170], step_ms=150)
+    assert c.count == 1 and reps[0].deepest == 80
 
 
 def test_invalid_thresholds_rejected():

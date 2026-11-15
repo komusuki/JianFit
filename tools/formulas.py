@@ -25,6 +25,7 @@ VERTICAL_LINE_PX = 1      # below(): a line closer to vertical than this gives "
 LANDING_WINDOW_MS = 500   # soft landing window after a jump
 # Rep counter (an engine setting, not a formula; lib/engine/constants.dart repTurnaroundDeg).
 REP_TURNAROUND_DEG = 5    # main measurement must move this far back from its deepest value
+MIN_REP_MS = 500          # v0.4.2: a rep shorter than this (leaving Ready to Complete) is dropped, not counted
 # Added in v0.4.
 FRONT_LEG_MARGIN = 0.1         # lunges: the ankles must be this far apart (body lengths) to switch legs
 PLAUSIBLE_MIN_ANGLE_DEG = 30   # a joint angle below this is impossible here: frame unjudgeable
