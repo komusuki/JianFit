@@ -4,11 +4,13 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../engine/cue_manager.dart';
 import '../engine/form_judge.dart';
 import '../engine/measurement_layer.dart';
 import '../engine/rep_counter.dart';
 import '../models/exercise_definition.dart';
 import '../models/strictness.dart';
+import '../services/cue_speaker.dart';
 import '../services/exercise_loader.dart';
 import '../services/pose_service.dart';
 import '../services/settings_service.dart';
@@ -28,6 +30,8 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
   final _poseService = PoseService();
   final _fpsWatch = Stopwatch();
   final _clock = Stopwatch(); // t_ms for the engine
+  final _cues = CueManager();
+  final _speaker = CueSpeaker();
   // Set once the exercise file is loaded.
   ExerciseDefinition? _exercise;
   MeasurementLayer? _layer;
@@ -41,6 +45,7 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
   bool _isPerson = false;
   RepResult? _lastRep;
   RepVerdict? _lastVerdict;
+  String? _cue; // shown on screen; null after a correct rep
   Strictness _strictness = Strictness.standard;
   String _status = 'Starting camera...';
   int _frames = 0;
@@ -72,6 +77,8 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
     _layer = MeasurementLayer(exercise.config);
     _counter = RepCounter.forExercise(exercise.config);
     _strictness = await SettingsService.loadStrictness(); // Member B's setting
+    _cues.voiceOn = await SettingsService.loadVoiceOn(); // Member B's setting
+    await _speaker.init();
     debugPrint(
       'EXERCISE loaded: ${exercise.id} '
       '(${loaded.exercises.length} file(s), ${loaded.errors.length} error(s))',
@@ -163,6 +170,9 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
         final rep = counter.update(main, frame.values, tMs);
         if (rep != null) {
           final verdict = judgeRep(rep, exercise.formChecks, _strictness);
+          final cue = _cues.onRep(verdict, tMs);
+          if (cue.speak) _speaker.speak(cue.text!);
+          _cue = cue.text;
           _lastRep = rep;
           _lastVerdict = verdict;
           debugPrint(
@@ -171,6 +181,17 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
             'duration=${rep.durationMs} ms  '
             '${_verdictText(verdict)}',
           );
+          if (cue.text != null) {
+            debugPrint(
+              '  CUE: "${cue.text}" ${cue.speak ? 'spoken' : 'shown only'}',
+            );
+          }
+          for (final c in cue.tips) {
+            debugPrint(
+              '  TIP CARD: ${c.name} 3 times this set '
+              '(demo clip: ${exercise.demoClip ?? 'none'})',
+            );
+          }
           for (final r in verdict.results) {
             debugPrint(
               '  ${r.check.name}: value=${r.value?.toStringAsFixed(3) ?? '-'} '
@@ -213,6 +234,8 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
       _counter?.reset();
       _lastRep = null;
       _lastVerdict = null;
+      _cues.reset();
+      _cue = null;
     });
   }
 
@@ -235,6 +258,7 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
       final main = f.values[mainName];
       lines
         ..add('${exercise.info.name}   Strictness: ${_strictness.name}')
+        ..add('Voice: ${_cues.voiceOn ? 'on' : 'off'}   Cue: ${_cue ?? '-'}')
         ..add('Status: ${f.status.name}   Side: ${_layer?.side?.name ?? '-'}')
         ..add(
           '$mainName: ${main == null ? '-' : main.toStringAsFixed(0)}   '
@@ -259,6 +283,7 @@ class _CameraTestScreenState extends State<CameraTestScreen> {
   void dispose() {
     _controller?.dispose();
     _poseService.close();
+    _speaker.stop();
     WakelockPlus.disable();
     super.dispose();
   }
