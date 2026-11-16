@@ -29,3 +29,9 @@ const int minRepMs = 500; // MIN_REP_MS
 // from where it was at the start of the window (only for exercises without
 // both-sides joints; see the formula document).
 const double stillMaxMove = 0.1; // STILL_MAX_MOVE
+
+// Cue manager (roadmap Part 7). Engine settings, not formulas.
+// The same cue is not spoken again within this time (safety cues excepted).
+const int cueRepeatMs = 5000;
+// The same mistake this many times in a set: show the tip card.
+const int tipAfterMistakes = 3;
