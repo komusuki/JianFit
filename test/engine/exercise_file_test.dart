@@ -54,11 +54,8 @@ void main() {
     expect(d.info.cameraView, 'Side');
     expect(d.orientation, 'portrait');
     expect(d.oneSided, isFalse);
-    expect(d.formChecks.map((c) => c.name), [
-      'depth',
-      'torso_lean',
-      'heels_down',
-    ]);
+    // heels_down removed Nov 16 until the heel measurement is fixed (v0.6).
+    expect(d.formChecks.map((c) => c.name), ['depth', 'torso_lean']);
 
     final depth = d.formChecks[0];
     expect(depth.category, CheckCategory.range);
@@ -71,7 +68,6 @@ void main() {
     expect(lean.limitFor(Strictness.beginner), 50);
     expect(lean.limitFor(Strictness.standard), 45);
     expect(lean.limitFor(Strictness.strict), 40);
-    expect(d.formChecks[2].timing, CheckWhen.throughout);
   });
 
   test('the squat file matches the test settings (squat_config.dart)', () {
@@ -158,7 +154,7 @@ void main() {
       final j = squatJson();
       j.remove('name');
       j['type'] = 'repz';
-      j['form_checks'][2]['priority'] = 0;
+      j['form_checks'][1]['priority'] = 0;
       final problems = problemsIn(j);
       expect(problems.length, 3);
     });
