@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/exercise_info.dart';
+import '../models/strictness.dart';
+import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 import '../services/workout_source.dart';
 import 'live_workout_screen.dart';
-import '../models/workout_records.dart';
 
 // Camera setup check (roadmap Part 10): placement instructions, a body
 // outline, and a 3-2-1 countdown once the source says the person is ready.
@@ -16,14 +18,21 @@ class SetupCheckScreen extends StatefulWidget {
     required this.exercise,
     required this.source,
     required this.plan,
+    required this.strictness,
+    required this.landscape,
   });
 
   final ExerciseInfo exercise;
   final WorkoutSource source;
 
-  /// Correct reps, or seconds for hold exercises.
   /// Target, sets and rest for this exercise.
   final RoutineItem plan;
+
+  /// Passed on to the live workout screen (saved with the session).
+  final Strictness strictness;
+
+  /// Lock the screen to landscape (floor exercises) or portrait.
+  final bool landscape;
 
   @override
   State<SetupCheckScreen> createState() => _SetupCheckScreenState();
@@ -38,6 +47,11 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations(
+      widget.landscape
+          ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : [DeviceOrientation.portraitUp],
+    );
     _sub = widget.source.updates.listen(_onUpdate);
     widget.source.start();
   }
@@ -74,6 +88,7 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
           exercise: widget.exercise,
           source: widget.source,
           plan: widget.plan,
+          strictness: widget.strictness,
         ),
       ),
     );
@@ -90,7 +105,10 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
   void dispose() {
     _countdownTimer?.cancel();
     _sub?.cancel();
-    if (!_handedOver) widget.source.stop();
+    if (!_handedOver) {
+      widget.source.stop();
+      SystemChrome.setPreferredOrientations([]);
+    }
     super.dispose();
   }
 

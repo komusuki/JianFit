@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
 
+import '../models/exercise_definition.dart';
 import '../models/exercise_info.dart';
 import '../models/strictness.dart';
-import '../services/settings_service.dart';
+import '../models/workout_records.dart';
+import '../services/engine_workout_source.dart';
 import '../services/fake_workout_source.dart';
 import '../services/replay_workout_source.dart';
+import '../services/settings_service.dart';
+import '../services/workout_source.dart';
 import 'setup_check_screen.dart';
-import '../models/workout_records.dart';
 
 class ExerciseDetailScreen extends StatefulWidget {
-  const ExerciseDetailScreen({super.key, required this.exercise});
+  const ExerciseDetailScreen({
+    super.key,
+    required this.exercise,
+    this.definition,
+  });
 
   final ExerciseInfo exercise;
+
+  /// Member A's exercise file, or null if this exercise has no file yet.
+  final ExerciseDefinition? definition;
 
   @override
   State<ExerciseDetailScreen> createState() => _ExerciseDetailScreenState();
@@ -25,6 +35,26 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
   bool _replay = false; // developer replay mode (Settings)
 
   bool get _isHold => widget.exercise.type == ExerciseType.hold;
+
+  /// Which source drives the workout: Member C's replay mode when the
+  /// developer switch is on, Member A's engine when the exercise has a file,
+  /// otherwise made-up data so every exercise can still be tried.
+  WorkoutSource _makeSource() {
+    final def = widget.definition;
+    if (_replay) {
+      return ReplayWorkoutSource(widget.exercise, strictness: _strictness);
+    }
+    if (def != null) return EngineWorkoutSource(def, _strictness);
+    return FakeWorkoutSource(widget.exercise);
+  }
+
+  /// Portrait for standing exercises, landscape for floor exercises.
+  /// Exercises without a file guess from their placement text.
+  bool get _landscape {
+    final o = widget.definition?.orientation;
+    if (o != null) return o == 'landscape';
+    return widget.exercise.placement.contains('floor');
+  }
 
   @override
   void initState() {
@@ -122,9 +152,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
               MaterialPageRoute(
                 builder: (_) => SetupCheckScreen(
                   exercise: e,
-                  source: _replay
-                      ? ReplayWorkoutSource(e, strictness: _strictness)
-                      : FakeWorkoutSource(e),
+                  source: _makeSource(),
                   plan: RoutineItem(
                     exerciseId: e.id,
                     targetReps: _isHold ? null : _target,
@@ -132,6 +160,8 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
                     sets: _sets,
                     restSec: _restSeconds,
                   ),
+                  strictness: _strictness,
+                  landscape: _landscape,
                 ),
               ),
             ),
