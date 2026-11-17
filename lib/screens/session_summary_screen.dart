@@ -96,7 +96,7 @@ class SessionSummaryView extends StatelessWidget {
           Card(
             child: ListTile(
               title: Text(
-                '${_exerciseName(set.exerciseId)}, set ${set.setNumber}',
+                '${exerciseName(set.exerciseId)}, set ${set.setNumber}',
               ),
               subtitle: Text(_setLine(set)),
             ),
@@ -110,8 +110,8 @@ class SessionSummaryView extends StatelessWidget {
   }
 }
 
-/// 'bodyweight_squat' -> 'Bodyweight squat'.
-String _exerciseName(String id) {
+/// 'bodyweight_squat' -> 'Bodyweight squat'. Also used by the History screen.
+String exerciseName(String id) {
   for (final e in fakeExercises) {
     if (e.id == id) return e.name;
   }
