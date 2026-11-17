@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/exercise_info.dart';
+import '../models/strictness.dart';
 import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 import '../services/workout_source.dart';
@@ -19,6 +21,7 @@ class LiveWorkoutScreen extends StatefulWidget {
     required this.exercise,
     required this.source,
     required this.plan,
+    required this.strictness,
   });
 
   final ExerciseInfo exercise;
@@ -27,6 +30,9 @@ class LiveWorkoutScreen extends StatefulWidget {
   /// Target per set, number of sets and rest (Member C's RoutineItem, so a
   /// routine is just a list of these).
   final RoutineItem plan;
+
+  /// Saved with the session (Member C).
+  final Strictness strictness;
 
   @override
   State<LiveWorkoutScreen> createState() => _LiveWorkoutScreenState();
@@ -85,6 +91,7 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     _sub?.cancel();
     widget.source.stop();
     WakelockPlus.disable();
+    SystemChrome.setPreferredOrientations([]);
     super.dispose();
   }
 

@@ -66,47 +66,51 @@ class _RestViewState extends State<RestView> {
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Rest',
-                style: TextStyle(color: Colors.white70, fontSize: 20),
-              ),
-              Text(
-                '$_left',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 96,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+          child: Center(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  OutlinedButton(
-                    onPressed: () => setState(() => _left += 15),
-                    child: const Text('+15 seconds'),
+                  const Text(
+                    'Rest',
+                    style: TextStyle(color: Colors.white70, fontSize: 20),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _finish,
-                    child: const Text('Skip rest'),
+                  Text(
+                    '$_left',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 96,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => setState(() => _left += 15),
+                        child: const Text('+15 seconds'),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: _finish,
+                        child: const Text('Skip rest'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  Text('Last set: ${widget.lastSet}', style: white),
+                  const SizedBox(height: 4),
+                  Text('Next: ${widget.next}', style: white),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Stay in front of the camera so it can find you for the next set.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
-              Text('Last set: ${widget.lastSet}', style: white),
-              const SizedBox(height: 4),
-              Text('Next: ${widget.next}', style: white),
-              const SizedBox(height: 16),
-              const Text(
-                'Stay in front of the camera so it can find you for the next set.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
-              ),
-            ],
+            ),
           ),
         ),
       ),
