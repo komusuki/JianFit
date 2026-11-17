@@ -14,6 +14,8 @@ class DatabaseService {
   /// sqflite_common_ffi). The app uses the defaults.
   DatabaseService({this.path, DatabaseFactory? factory})
     : _factory = factory ?? databaseFactory;
+  /// The app's one shared database. Screens use this; tests make their own.
+  static final instance = DatabaseService();
 
   static const fileName = 'jianfit.db';
   static const schemaVersion = 1;
