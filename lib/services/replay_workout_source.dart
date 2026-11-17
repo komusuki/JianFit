@@ -52,6 +52,7 @@ class ReplayWorkoutSource implements WorkoutSource {
   bool _autoPaused = false;
   bool _waitingForCountdown = false;
   bool _stopped = false;
+  bool _publishSoon = false; // resume(): publish on the next tick, not at once
   int _correct = 0;
   int _attempted = 0;
   String? _cue;
@@ -156,7 +157,8 @@ class ReplayWorkoutSource implements WorkoutSource {
         _clock.stop();
       }
     }
-    if (changed) _publish();
+    if (changed || _publishSoon) _publish();
+    _publishSoon = false;
   }
 
   static String _names(RepVerdict v) => v.failed.map((c) => c.name).join(', ');
@@ -242,7 +244,11 @@ class ReplayWorkoutSource implements WorkoutSource {
   void resume() {
     _manualPause = false;
     if (!_waitingForCountdown && _index < _frames.length) _clock.start();
-    _publish();
+    // Not _publish() here: between sets the screen calls resume() and then
+    // beginSet(). Publishing now would send the old set's counts unpaused, and
+    // the screen would end the new set at once. The next tick (30 ms) publishes
+    // after beginSet() has reset them.
+    _publishSoon = true;
   }
 
   @override
