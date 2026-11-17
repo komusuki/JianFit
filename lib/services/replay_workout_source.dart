@@ -169,7 +169,9 @@ class ReplayWorkoutSource implements WorkoutSource {
     _runner?.reset();
     _index = 0;
     _clock.reset();
-    debugPrint('REPLAY clip ended: playing it again ($_correct correct so far)');
+    debugPrint(
+      'REPLAY clip ended: playing it again ($_correct correct so far)',
+    );
   }
 
   void _publish() {
@@ -236,7 +238,9 @@ class ReplayWorkoutSource implements WorkoutSource {
   void pause() {
     _manualPause = true;
     _clock.stop();
-    _runner?.counter.reset(keepCount: true); // a half-done rep does not carry over
+    _runner?.counter.reset(
+      keepCount: true,
+    ); // a half-done rep does not carry over
     _publish();
   }
 

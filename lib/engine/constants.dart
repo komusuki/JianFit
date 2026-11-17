@@ -35,3 +35,12 @@ const double stillMaxMove = 0.1; // STILL_MAX_MOVE
 const int cueRepeatMs = 5000;
 // The same mistake this many times in a set: show the tip card.
 const int tipAfterMistakes = 3;
+
+// Day 9 engine settings (rep counter and hold timer). Not formulas, but listed
+// in the formula document so tools/rep_counter.py uses the same values.
+// Jump squat: a rep with no jump completes this long after the knee is back up.
+const int jumpWaitMs = 400; // JUMP_WAIT_MS
+// Holds: a check must fail this long before the hold counts as broken.
+const int holdBreakMs = 500; // HOLD_BREAK_MS
+// Floor holds (plank): in position only while torso_lean is at least this.
+const double holdMinLeanDeg = 60; // HOLD_MIN_LEAN_DEG

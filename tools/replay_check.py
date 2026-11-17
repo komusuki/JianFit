@@ -53,29 +53,33 @@ SIDE_NAMES = {"L": "Left", "R": "Right"}
 
 
 def load_settings(ex_slug, ex):
-    """(file used, start threshold, complete threshold, form checks). The app's exercise file
-    wins over the tuning file, so the replay always judges with what the phone uses."""
+    """(file used, start threshold, complete threshold, form checks, jump limit). The app's
+    exercise file wins over the tuning file, so the replay always judges with what the phone uses."""
     ex_id = exercise_id(ex_slug)
     asset, tuning = ASSETS_DIR / f"{ex_id}.json", TUNING_DIR / f"{ex_id}.json"
     if asset.exists():
         path, data = asset, json.loads(asset.read_text(encoding="utf-8"))
         tracking = data.get("tracking", {})
         start, complete = tracking.get("start_threshold"), tracking.get("complete_threshold")
+        jump_limit = tracking.get("jump_limit")
         if tracking.get("main_measurement") not in (None, ex["main"]):
             print(f"Warning: {asset.name} uses main measurement {tracking['main_measurement']}, "
                   f"the replay tool uses {ex['main']}.")
     elif tuning.exists():
         path, data = tuning, json.loads(tuning.read_text(encoding="utf-8"))
         start, complete = data.get("start_threshold"), data.get("complete_threshold")
+        jump_limit = data.get("jump_limit")
     else:
         sys.exit(f"No exercise file {asset} and no tuning file {tuning}. "
                  f"Copy tuning/forward_lunge.json and edit it for {ex_slug}.")
-    checks, problems = read_form_checks(data.get("form_checks"), ex["measurements"])
+    # Jump squat: the rep counter adds jump_height and landing_knee_min to each rep.
+    allowed = ex["measurements"] + (["jump_height", "landing_knee_min"] if jump_limit else [])
+    checks, problems = read_form_checks(data.get("form_checks"), allowed)
     if not isinstance(start, (int, float)) or not isinstance(complete, (int, float)):
         problems.append("start_threshold and complete_threshold must be numbers")
     if problems:
         sys.exit(f"{path.name} has {len(problems)} problem(s):\n" + "\n".join(f"  - {p}" for p in problems))
-    return path, start, complete, checks
+    return path, start, complete, checks, jump_limit
 
 
 def find_measurement_csvs(folder, ex_slug):
@@ -96,9 +100,9 @@ def to_float(text):
     return None if math.isnan(v) else v
 
 
-def detect_reps(csv_path, ex, start, complete):
+def detect_reps(csv_path, ex, start, complete, jump_limit=None):
     """Feed judged frames to the rep counter; reset it when the measurement layer paused."""
-    counter = RepCounter(ex["direction"], start, complete)
+    counter = RepCounter(ex["direction"], start, complete, jump_limit=jump_limit)
     names = ex["measurements"]
     reps = []
     with open(csv_path, newline="") as fh:
@@ -198,7 +202,7 @@ def main():
     ex = EXERCISES[args.exercise]
     if ex["main"] is None:
         sys.exit(f"{args.exercise} is a hold; replay_check.py handles rep exercises only.")
-    settings_path, start, complete, checks = load_settings(args.exercise, ex)
+    settings_path, start, complete, checks, jump_limit = load_settings(args.exercise, ex)
     csvs = find_measurement_csvs(folder, args.exercise)
     if args.subjects:
         wanted = {s.strip().upper() for s in args.subjects.split(",")}
@@ -211,6 +215,8 @@ def main():
     print(f"Replay check: {args.exercise}   (settings: {settings_path.parent.name}/{settings_path.name}, "
           f"strictness {args.strictness})")
     print(f"  Rep: starts {direction} {start}, completes back past {complete} ({ex['main']})")
+    if jump_limit:
+        print(f"  Jump: both ankles rise more than {jump_limit} body lengths above their lowest point before takeoff")
     for c in checks:
         fails = f"> {c.limit_for(args.strictness):g}" if c.kind == "max" else f"< {c.limit_for(args.strictness):g}"
         where = "at the deepest frame" if c.timing == "bottom" else "at any point in the rep"
@@ -222,7 +228,7 @@ def main():
     for n, csv_path in enumerate(csvs, start=1):
         stem = csv_path.parent.name
         subject = stem.split("_")[1].upper() if "_" in stem else "?"
-        reps = detect_reps(csv_path, ex, start, complete)
+        reps = detect_reps(csv_path, ex, start, complete, jump_limit)
         verdicts = [run_checks(r, checks, args.strictness) for r in reps]
         labeled = labels.get(stem.lower(), [])
         print(f"[{n}/{len(csvs)}] {stem}")

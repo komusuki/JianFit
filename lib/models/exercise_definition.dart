@@ -131,8 +131,10 @@ class ExerciseDefinition {
     List<String>? measurements;
     String? mainMeasurement;
     Direction? direction;
-    double? start, complete;
+    double? start, complete, jumpLimit;
+    var bodyLineEnd = Joint.ankle;
     var oneSided = false;
+    final isHold = type == ExerciseType.hold;
     if (t != null) {
       posture = r.choice(t, 'posture', Posture.values, path: 'tracking');
       requiredJoints = r.joints(t, 'required_joints', path: 'tracking');
@@ -143,7 +145,25 @@ class ExerciseDefinition {
         required: false,
       );
       measurements = r.measurementNames(t, 'measurements', path: 'tracking');
-      mainMeasurement = r.text(t, 'main_measurement', path: 'tracking');
+      // Holds have no reps (Day 9): no main measurement, direction,
+      // thresholds or jump.
+      const repFields = [
+        'main_measurement',
+        'direction',
+        'start_threshold',
+        'complete_threshold',
+        'jump_limit',
+      ];
+      if (isHold) {
+        for (final f in repFields) {
+          if (t.containsKey(f)) {
+            r.add('tracking.$f is not used by hold exercises; remove it');
+          }
+        }
+      }
+      if (!isHold) {
+        mainMeasurement = r.text(t, 'main_measurement', path: 'tracking');
+      }
       if (mainMeasurement != null &&
           measurements != null &&
           !measurements.contains(mainMeasurement)) {
@@ -152,9 +172,39 @@ class ExerciseDefinition {
           'tracking.measurements',
         );
       }
-      direction = r.choice(t, 'direction', Direction.values, path: 'tracking');
-      start = r.number(t, 'start_threshold', path: 'tracking');
-      complete = r.number(t, 'complete_threshold', path: 'tracking');
+      if (!isHold) {
+        direction = r.choice(
+          t,
+          'direction',
+          Direction.values,
+          path: 'tracking',
+        );
+        start = r.number(t, 'start_threshold', path: 'tracking');
+        complete = r.number(t, 'complete_threshold', path: 'tracking');
+      }
+      // Jump squat (Day 9): needs both ankles' jump_rise.
+      if (!isHold && t.containsKey('jump_limit')) {
+        jumpLimit = r.number(t, 'jump_limit', path: 'tracking');
+        if (jumpLimit != null && jumpLimit <= 0) {
+          r.add('tracking.jump_limit must be more than 0');
+        }
+        if (measurements != null &&
+            !(measurements.contains('jump_rise_left') &&
+                measurements.contains('jump_rise_right'))) {
+          r.add(
+            'tracking.jump_limit needs jump_rise_left and jump_rise_right '
+            'in tracking.measurements',
+          );
+        }
+      }
+      final end = r.text(t, 'body_line_end', path: 'tracking', required: false);
+      if (end != null) {
+        if (end == 'ankle' || end == 'knee') {
+          bodyLineEnd = jointNames[end]!;
+        } else {
+          r.add("tracking.body_line_end must be ankle or knee, not '$end'");
+        }
+      }
       if (direction != null && start != null && complete != null) {
         if (direction == Direction.dip && complete <= start) {
           r.add(
@@ -180,11 +230,11 @@ class ExerciseDefinition {
     } else {
       final names = <String>{};
       for (var i = 0; i < rawChecks.length; i++) {
-        final check = r.formCheck(
-          rawChecks[i],
-          'form_checks[$i]',
-          measurements ?? const [],
-        );
+        final check = r.formCheck(rawChecks[i], 'form_checks[$i]', [
+          ...?measurements,
+          // Jump squat: values the rep counter adds to each rep.
+          if (jumpLimit != null) ...repMeasurements,
+        ]);
         if (check == null) continue;
         if (!names.add(check.name)) {
           r.add("form_checks[$i]: the name '${check.name}' is used twice");
@@ -213,10 +263,12 @@ class ExerciseDefinition {
         requiredJoints: requiredJoints!,
         bothSidesJoints: bothSidesJoints ?? const [],
         measurements: measurements!,
-        mainMeasurement: mainMeasurement!,
-        direction: direction!,
-        startThreshold: start!,
-        completeThreshold: complete!,
+        mainMeasurement: mainMeasurement,
+        direction: direction,
+        startThreshold: start,
+        completeThreshold: complete,
+        jumpLimit: jumpLimit,
+        bodyLineEnd: bodyLineEnd,
       ),
       formChecks: checks,
       orientation: orientation!,
@@ -237,6 +289,10 @@ class ExerciseFileException implements Exception {
       '$fileName has ${problems.length} problem(s):\n'
       '${problems.map((p) => '  - $p').join('\n')}';
 }
+
+/// Values the rep counter adds to each jump squat rep, usable in form checks
+/// when tracking.jump_limit is set.
+const List<String> repMeasurements = ['jump_height', 'landing_knee_min'];
 
 /// JSON joint names -> engine joints.
 const Map<String, Joint> jointNames = {

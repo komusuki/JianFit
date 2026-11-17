@@ -23,6 +23,7 @@ SMOOTH_RESET_MS = 500     # clear the smoothing buffers after this long with no 
 MIN_BODY_LENGTH_PX = 20   # L below this: person too far away, frame unjudgeable
 VERTICAL_LINE_PX = 1      # below(): a line closer to vertical than this gives "unknown"
 LANDING_WINDOW_MS = 500   # soft landing window after a jump
+JUMP_WAIT_MS = 400        # jump squat: a rep with no jump completes this long after the knee is back up
 # Rep counter (an engine setting, not a formula; lib/engine/constants.dart repTurnaroundDeg).
 REP_TURNAROUND_DEG = 5    # main measurement must move this far back from its deepest value
 MIN_REP_MS = 500          # v0.4.2: a rep shorter than this (leaving Ready to Complete) is dropped, not counted

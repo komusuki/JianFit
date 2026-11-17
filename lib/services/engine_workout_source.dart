@@ -7,9 +7,12 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../engine/cue_manager.dart';
 import '../engine/form_judge.dart';
+import '../engine/hold_timer.dart';
+import '../engine/landmarks.dart';
 import '../engine/measurement_layer.dart';
 import '../engine/rep_counter.dart';
 import '../models/exercise_definition.dart';
+import '../models/exercise_info.dart';
 import '../models/strictness.dart';
 import '../models/workout_view.dart';
 import '../widgets/skeleton_painter.dart';
@@ -24,17 +27,25 @@ import 'workout_source.dart';
 // pause), form judge, cue manager. Drives Member B's setup check and live
 // workout screens through the WorkoutSource contract.
 // Before beginSet() only the measurement layer runs (setup and ready).
-// Hold exercises are not timed yet: the hold timer comes on Day 9.
+// Holds (Day 9) use HoldTimer instead of the rep counter; lunges report
+// correct reps per front leg; the jump squat's jump detection is inside the
+// rep counter.
 class EngineWorkoutSource implements WorkoutSource {
   EngineWorkoutSource(this.exercise, this.strictness)
     : _layer = MeasurementLayer(exercise.config),
-      _counter = RepCounter.forExercise(exercise.config);
+      _counter = exercise.info.type == ExerciseType.hold
+          ? null
+          : RepCounter.forExercise(exercise.config),
+      _hold = exercise.info.type == ExerciseType.hold
+          ? HoldTimer(exercise.formChecks, strictness)
+          : null;
 
   final ExerciseDefinition exercise;
   final Strictness strictness;
 
   final MeasurementLayer _layer;
-  final RepCounter _counter;
+  final RepCounter? _counter; // rep exercises
+  final HoldTimer? _hold; // hold exercises
   final _cues = CueManager();
   final _speaker = CueSpeaker();
   final _poseService = PoseService();
@@ -62,6 +73,8 @@ class EngineWorkoutSource implements WorkoutSource {
   bool _autoPaused = false;
   int _correct = 0;
   int _attempted = 0;
+  int _correctLeft = 0;
+  int _correctRight = 0;
   String? _cue;
   bool? _lastRepCorrect;
 
@@ -149,17 +162,23 @@ class EngineWorkoutSource implements WorkoutSource {
     if (!wasReady && _layer.isReady) {
       debugPrint(
         'ENGINE setup done: side=${_layer.side!.name} '
-            'baseline=${_layer.baseline}',
+        'baseline=${_layer.baseline}',
       );
     }
     if (frame.status == FrameStatus.paused) {
       // No usable frame for 2 s: setup starts again (ready goes false).
       _autoPaused = true;
-      _counter.reset(keepCount: true);
+      _counter?.reset(keepCount: true);
       debugPrint('ENGINE paused: no judgeable frame for 2 s');
     } else if (frame.status == FrameStatus.judged) {
       _autoPaused = false;
-      if (_counting && !_manualPause) _count(frame, tMs);
+      if (_counting && !_manualPause) {
+        if (_hold != null) {
+          _holdFrame(frame, tMs);
+        } else {
+          _count(frame, tMs);
+        }
+      }
     }
 
     _pose = pose;
@@ -173,11 +192,15 @@ class EngineWorkoutSource implements WorkoutSource {
   void _count(FrameResult frame, int tMs) {
     final main = frame.values[exercise.config.mainMeasurement];
     if (main == null) return;
-    final rep = _counter.update(main, frame.values, tMs);
+    final rep = _counter!.update(main, frame.values, tMs, leg: frame.frontLeg);
     if (rep == null) return;
     final verdict = judgeRep(rep, exercise.formChecks, strictness);
     _attempted++;
-    if (verdict.correct) _correct++;
+    if (verdict.correct) {
+      _correct++;
+      if (rep.leg == Side.left) _correctLeft++;
+      if (rep.leg == Side.right) _correctRight++;
+    }
     _lastRepCorrect = verdict.correct;
     final cue = _cues.onRep(verdict, tMs);
     _cue = cue.text;
@@ -187,17 +210,54 @@ class EngineWorkoutSource implements WorkoutSource {
     final said = cue.text == null
         ? ''
         : '  cue "${cue.text}" ${cue.speak ? 'spoken' : 'shown only'}';
-    debugPrint('ENGINE rep $_attempted: $result$said');
+    final leg = rep.leg == null ? '' : ' (${rep.leg!.name} leg)';
+    debugPrint('ENGINE rep $_attempted$leg: $result$said');
     for (final r in verdict.results) {
       debugPrint(
         '  ${r.check.name}: value=${r.value?.toStringAsFixed(3) ?? '-'} '
-            '${r.check.kind.name} ${r.limit} -> '
-            '${r.passed == null ? 'skipped' : (r.passed! ? 'pass' : 'FAIL')}',
+        '${r.check.kind.name} ${r.limit} -> '
+        '${r.passed == null ? 'skipped' : (r.passed! ? 'pass' : 'FAIL')}',
       );
     }
     for (final c in cue.tips) {
       debugPrint('ENGINE tip card: ${c.name} 3 times this set');
     }
+  }
+
+  void _holdFrame(FrameResult frame, int tMs) {
+    final hold = _hold!;
+    final before = hold.state;
+    final broke = hold.update(frame.values, tMs);
+    if (broke != null) {
+      final cue = _cues.onRep(broke, tMs);
+      _cue = cue.text;
+      if (cue.speak) _speaker.speak(cue.text!);
+      final names = broke.failed.map((c) => c.name).join(', ');
+      debugPrint(
+        'ENGINE hold broken at ${hold.seconds.toStringAsFixed(1)} s ($names)'
+        '${cue.speak ? '  cue "${cue.text}" spoken' : ''}',
+      );
+      for (final r in broke.results) {
+        debugPrint(
+          '  ${r.check.name}: value=${r.value?.toStringAsFixed(3) ?? '-'} '
+          '${r.check.kind.name} ${r.limit} -> '
+          '${r.passed == null ? 'skipped' : (r.passed! ? 'pass' : 'FAIL')}',
+        );
+      }
+      for (final c in cue.tips) {
+        debugPrint('ENGINE tip card: ${c.name} 3 times this set');
+      }
+    }
+    if (hold.state != before) {
+      debugPrint('ENGINE hold: ${hold.state.name}');
+      if (hold.state == HoldState.holding) _cue = null;
+    }
+    // Green while holding, red while broken (the live screen's frame colour).
+    _lastRepCorrect = switch (hold.state) {
+      HoldState.holding => true,
+      HoldState.broken => false,
+      HoldState.notInPosition => null,
+    };
   }
 
   void _logFps() {
@@ -218,7 +278,10 @@ class EngineWorkoutSource implements WorkoutSource {
       correct: _correct,
       attempted: _attempted,
       cue: _cue,
+      holdSeconds: _hold?.seconds ?? 0,
       lastRepCorrect: _lastRepCorrect,
+      correctLeft: _correctLeft,
+      correctRight: _correctRight,
     );
     _updates.add(_current);
   }
@@ -253,10 +316,13 @@ class EngineWorkoutSource implements WorkoutSource {
 
   @override
   void beginSet() {
-    _counter.reset();
+    _counter?.reset();
+    _hold?.reset();
     _cues.reset();
     _correct = 0;
     _attempted = 0;
+    _correctLeft = 0;
+    _correctRight = 0;
     _cue = null;
     _lastRepCorrect = null;
     _counting = true;
@@ -266,14 +332,16 @@ class EngineWorkoutSource implements WorkoutSource {
   @override
   void pause() {
     _manualPause = true;
-    _counter.reset(keepCount: true); // a half-done rep does not carry over
+    _counter?.reset(keepCount: true); // a half-done rep does not carry over
     _publish();
   }
 
   @override
   void resume() {
+    // No publish here: _startNextSet() calls resume() before beginSet(), and
+    // an update now would carry the old set's counts unpaused. The next
+    // processed frame publishes (about 50 ms later).
     _manualPause = false;
-    _publish();
   }
 
   @override

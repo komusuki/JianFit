@@ -218,4 +218,108 @@ void main() {
     }
     expect(layer.isReady, isTrue);
   });
+
+  // Day 9: jump squat, plank and lunge measurements.
+  test('jump_rise: each ankle against the setup baseline (body lengths)', () {
+    const jumpConfig = ExerciseConfig(
+      id: 'test_jump',
+      posture: Posture.standing,
+      requiredJoints: [Joint.shoulder, Joint.hip, Joint.knee, Joint.ankle],
+      bothSidesJoints: [Joint.ankle],
+      measurements: ['knee_angle', 'jump_rise_left', 'jump_rise_right'],
+      mainMeasurement: 'knee_angle',
+      direction: Direction.dip,
+      startThreshold: 150,
+      completeThreshold: 160,
+      jumpLimit: 0.15,
+    );
+    final layer = MeasurementLayer(jumpConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(standingFrame(), t);
+    }
+    // The whole body 40 px higher: in the air. L = 200 px.
+    final f = layer.process(shifted(0, -40), 1100);
+    expect(f.status, FrameStatus.judged);
+    expect(f.values['jump_rise_left'], closeTo(0.2, 0.001));
+    expect(f.values['jump_rise_right'], closeTo(0.2, 0.001));
+  });
+
+  test('plank: hip_sag to the ankle and elbow_under_shoulder', () {
+    const plankConfig = ExerciseConfig(
+      id: 'test_plank',
+      posture: Posture.floor,
+      requiredJoints: [Joint.shoulder, Joint.elbow, Joint.hip, Joint.ankle],
+      measurements: ['hip_sag', 'elbow_under_shoulder', 'torso_lean'],
+    );
+    Map<int, Pt> plankFrame(double hipY) {
+      final m = <int, Pt>{};
+      void put(Joint j, double x, double y) {
+        m[landmarkIndex(j, Side.left)] = Pt(x, y, 0.9);
+        m[landmarkIndex(j, Side.right)] = Pt(x, y, 0.6);
+      }
+
+      put(Joint.ear, 250, 290);
+      put(Joint.shoulder, 300, 300);
+      put(Joint.elbow, 300, 380); // under the shoulder
+      put(Joint.wrist, 380, 380);
+      put(Joint.hip, 500, hipY);
+      put(Joint.knee, 650, 320);
+      put(Joint.ankle, 800, 330);
+      return m;
+    }
+
+    final layer = MeasurementLayer(plankConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(plankFrame(312), t); // hip on the shoulder-ankle line
+    }
+    expect(layer.facing, -1); // head to the left
+    final flat = layer.process(plankFrame(312), 1100);
+    expect(flat.values['hip_sag'], closeTo(0, 0.01));
+    expect(flat.values['elbow_under_shoulder'], closeTo(0, 0.01));
+    final sag = layer.process(plankFrame(352), 1200); // hips 40 px low
+    // Smoothed over 2 frames: (0 + 18.77) / 2.
+    expect(sag.values['hip_sag'], closeTo(18.77 / 2, 0.01));
+  });
+
+  test('lunges: front leg with the v0.4 margin, and its measurements', () {
+    const lungeConfig = ExerciseConfig(
+      id: 'test_lunge_measurements',
+      posture: Posture.standing,
+      requiredJoints: [Joint.shoulder, Joint.hip],
+      bothSidesJoints: [Joint.hip, Joint.knee, Joint.ankle],
+      measurements: [
+        'front_knee_angle',
+        'back_knee_height',
+        'front_knee_over_ankle',
+      ],
+      mainMeasurement: 'front_knee_angle',
+      direction: Direction.dip,
+      startThreshold: 150,
+      completeThreshold: 160,
+    );
+    final layer = MeasurementLayer(lungeConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(standingFrame(), t);
+    }
+    // Left leg forward (thigh at 45 degrees, shin vertical), right leg back.
+    final lunge = standingFrame()
+      ..[landmarkIndex(Joint.knee, Side.left)] = const Pt(241.42, 441.42, 0.9)
+      ..[landmarkIndex(Joint.ankle, Side.left)] = const Pt(241.42, 641.42, 0.9)
+      ..[landmarkIndex(Joint.knee, Side.right)] = const Pt(0, 473.21, 0.6)
+      ..[landmarkIndex(Joint.ankle, Side.right)] = const Pt(
+        -173.21,
+        573.21,
+        0.6,
+      );
+    final f = layer.process(lunge, 1100);
+    expect(f.status, FrameStatus.judged);
+    expect(f.frontLeg, Side.left);
+    expect(f.values['front_knee_angle'], closeTo(135, 0.01));
+    expect(f.values['front_knee_over_ankle'], closeTo(0, 0.01));
+    // Floor (heel baseline) 710, back knee at 473.21, L = 200.
+    expect(f.values['back_knee_height'], closeTo((710 - 473.21) / 200, 0.001));
+
+    // Feet together again: within the margin, so the left leg stays front.
+    expect(layer.process(standingFrame(), 1200).frontLeg, Side.left);
+  });
 }
