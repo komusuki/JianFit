@@ -1,0 +1,53 @@
+{
+  "id": "jump_squat",
+  "name": "Jump squat",
+  "pattern": "Squat",
+  "level": "Intermediate",
+  "type": "reps",
+  "camera": {
+    "view": "Side",
+    "orientation": "portrait",
+    "placement": "Phone at hip height, 2 to 3 meters away, facing your side. Leave room above your head for the jump."
+  },
+  "tracking": {
+    "posture": "standing",
+    "required_joints": ["shoulder", "hip", "knee", "ankle"],
+    "both_sides_joints": ["ankle"],
+    "measurements": ["knee_angle", "jump_rise_left", "jump_rise_right"],
+    "main_measurement": "knee_angle",
+    "direction": "dip",
+    "start_threshold": 150,
+    "complete_threshold": 160,
+    "jump_limit": 0.10,
+    "one_sided": false
+  },
+  "form_checks": [
+    {
+      "name": "stiff_landing",
+      "category": "safety",
+      "measurement": "landing_knee_min",
+      "when": "bottom",
+      "max": 130,
+      "cue": "Land softly. Bend your knees.",
+      "priority": 1
+    },
+    {
+      "name": "shallow_depth",
+      "category": "range",
+      "measurement": "knee_angle",
+      "when": "bottom",
+      "max": 100,
+      "cue": "Go lower before you jump.",
+      "priority": 2
+    },
+    {
+      "name": "no_jump",
+      "category": "range",
+      "measurement": "jump_height",
+      "when": "bottom",
+      "min": 0.10,
+      "cue": "Jump up.",
+      "priority": 3
+    }
+  ]
+}

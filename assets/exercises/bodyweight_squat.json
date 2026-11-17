@@ -23,7 +23,7 @@
   },
   "form_checks": [
     {
-      "name": "depth",
+      "name": "shallow_depth",
       "category": "range",
       "measurement": "knee_angle",
       "when": "bottom",
@@ -32,11 +32,11 @@
       "priority": 2
     },
     {
-      "name": "torso_lean",
+      "name": "forward_lean",
       "category": "cleanliness",
       "measurement": "torso_lean",
       "when": "bottom",
-      "max": {"beginner": 50, "standard": 45, "strict": 40},
+      "max": {"beginner": 55, "standard": 50, "strict": 45},
       "cue": "Keep your chest up.",
       "priority": 3
     }

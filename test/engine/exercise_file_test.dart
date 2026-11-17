@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'package:jianfit/engine/landmarks.dart';
 import 'package:jianfit/models/exercise_definition.dart';
 import 'package:jianfit/models/exercise_info.dart';
 import 'package:jianfit/models/strictness.dart';
@@ -55,7 +56,7 @@ void main() {
     expect(d.orientation, 'portrait');
     expect(d.oneSided, isFalse);
     // heels_down removed Nov 16 until the heel measurement is fixed (v0.6).
-    expect(d.formChecks.map((c) => c.name), ['depth', 'torso_lean']);
+    expect(d.formChecks.map((c) => c.name), ['shallow_depth', 'forward_lean']);
 
     final depth = d.formChecks[0];
     expect(depth.category, CheckCategory.range);
@@ -65,9 +66,9 @@ void main() {
     expect(depth.limitFor(Strictness.strict), 100);
 
     final lean = d.formChecks[1];
-    expect(lean.limitFor(Strictness.beginner), 50);
-    expect(lean.limitFor(Strictness.standard), 45);
-    expect(lean.limitFor(Strictness.strict), 40);
+    expect(lean.limitFor(Strictness.beginner), 55);
+    expect(lean.limitFor(Strictness.standard), 50);
+    expect(lean.limitFor(Strictness.strict), 45);
   });
 
   test('the squat file matches the test settings (squat_config.dart)', () {
@@ -164,6 +165,76 @@ void main() {
       (j['form_checks'][1] as Map).remove('when');
       final d = ExerciseDefinition.fromJson(j, 'bodyweight_squat.json');
       expect(d.formChecks[1].timing, CheckWhen.bottom);
+    });
+  });
+
+  // Day 9: holds, jump_limit and body_line_end.
+  group('Day 9 fields', () {
+    Map<String, dynamic> file(String name) =>
+        jsonDecode(File('assets/exercises/$name').readAsStringSync())
+            as Map<String, dynamic>;
+
+    test('the jump squat file reads correctly', () {
+      final d = ExerciseDefinition.fromJson(
+        file('jump_squat.json'),
+        'jump_squat.json',
+      );
+      expect(d.config.jumpLimit, 0.10);
+      expect(d.config.bothSidesJoints, [Joint.ankle]);
+      expect(d.formChecks.map((c) => c.name), [
+        'stiff_landing',
+        'shallow_depth',
+        'no_jump',
+      ]);
+      expect(d.formChecks.first.category, CheckCategory.safety);
+      expect(d.formChecks.first.measurement, 'landing_knee_min');
+    });
+
+    test('the forearm plank file is a hold with no rep fields', () {
+      final d = ExerciseDefinition.fromJson(
+        file('forearm_plank.json'),
+        'forearm_plank.json',
+      );
+      expect(d.info.type, ExerciseType.hold);
+      expect(d.config.mainMeasurement, isNull);
+      expect(d.config.direction, isNull);
+      expect(d.config.bodyLineEnd, Joint.ankle);
+      expect(d.formChecks.length, 3);
+    });
+
+    test('a hold with rep fields is reported', () {
+      final j = file('forearm_plank.json');
+      j['tracking']['start_threshold'] = 150;
+      expect(
+        problemsIn(j, 'forearm_plank.json').join('\n'),
+        contains('start_threshold is not used by hold exercises'),
+      );
+    });
+
+    test('jump_limit needs both jump_rise measurements', () {
+      final j = file('jump_squat.json');
+      (j['tracking']['measurements'] as List).remove('jump_rise_right');
+      expect(
+        problemsIn(j, 'jump_squat.json').join('\n'),
+        contains('jump_limit needs jump_rise_left and jump_rise_right'),
+      );
+    });
+
+    test('jump_height and landing_knee_min need jump_limit', () {
+      final j = file('jump_squat.json');
+      (j['tracking'] as Map).remove('jump_limit');
+      final problems = problemsIn(j, 'jump_squat.json').join('\n');
+      expect(problems, contains("'jump_height'"));
+      expect(problems, contains("'landing_knee_min'"));
+    });
+
+    test('body_line_end must be ankle or knee', () {
+      final j = file('forearm_plank.json');
+      j['tracking']['body_line_end'] = 'wrist';
+      expect(
+        problemsIn(j, 'forearm_plank.json').join('\n'),
+        contains('body_line_end must be ankle or knee'),
+      );
     });
   });
 }

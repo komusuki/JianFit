@@ -1,5 +1,6 @@
 import 'package:test/test.dart';
 import 'package:jianfit/engine/exercise_config.dart';
+import 'package:jianfit/engine/landmarks.dart';
 import 'package:jianfit/engine/rep_counter.dart';
 
 /// Feeds values 200 ms apart and returns the completed reps.
@@ -127,4 +128,264 @@ void main() {
     expect(reps.length, 1);
     expect(reps.first.deepest, 175);
   });
+
+  // Jump squat (Day 9). Same frames as tools/test_rep_counter.py. The setup
+  // baseline is off by +0.25 body lengths on purpose: the counter uses the
+  // rise since the rep started, so the offset must not matter.
+  group('jump squat', () {
+    const offset = 0.25;
+    // (knee angle, rise of the left ankle since setup); the right ankle is
+    // 0.02 lower while in the air.
+    const jump = <(double, double)>[
+      (175.0, 0.0), (140.0, 0.0), (110.0, 0.0), (100.0, 0.0), (120.0, 0.0),
+      (160.0, 0.0), (175.0, 0.05), // squat, take off
+      (178.0, 0.30), (178.0, 0.45), (176.0, 0.22), // in the air
+      (170.0, 0.02), (140.0, 0.0), (125.0, 0.0), (135.0, 0.0), (150.0, 0.0),
+      (165.0, 0.0), (175.0, 0.0), // land, stand up
+    ];
+
+    RepCounter jumpSquat() => RepCounter(
+      direction: Direction.dip,
+      startThreshold: 150,
+      completeThreshold: 160,
+      jumpLimit: 0.15,
+    );
+
+    List<RepResult> feed(RepCounter c, List<(double, double)> frames) {
+      final reps = <RepResult>[];
+      for (var i = 0; i < frames.length; i++) {
+        final (knee, rise) = frames[i];
+        final r = c.update(knee, {
+          'knee_angle': knee,
+          'jump_rise_left': offset + rise,
+          'jump_rise_right': rise == 0 ? offset : offset + rise - 0.02,
+        }, i * 100);
+        if (r != null) reps.add(r);
+      }
+      return reps;
+    }
+
+    test('a jump rep completes after the landing window', () {
+      final c = jumpSquat();
+      final reps = feed(c, jump);
+      expect(c.count, 1);
+      expect(reps.length, 1);
+      final r = reps.first;
+      expect(r.deepest, 100); // the squat, not the landing bend
+      expect(r.atDeepest['jump_height'], closeTo(0.43, 1e-9)); // lower ankle
+      expect(r.atDeepest['landing_knee_min'], 125); // 500 ms after landing
+      expect(r.endMs, 1500); // landed at 1000, plus 500 ms
+    });
+
+    test('a squat without a jump completes after the wait', () {
+      final reps = feed(jumpSquat(), const [
+        (175.0, 0.0),
+        (140.0, 0.0),
+        (100.0, 0.0),
+        (120.0, 0.0),
+        (165.0, 0.0),
+        (170.0, 0.0),
+        (172.0, 0.0),
+        (172.0, 0.0),
+        (172.0, 0.0),
+      ]);
+      expect(reps.length, 1);
+      expect(reps.first.endMs, 800); // back up at 400, plus 400 ms
+      expect(reps.first.atDeepest['jump_height'], 0);
+      expect(reps.first.atDeepest.containsKey('landing_knee_min'), isFalse);
+    });
+
+    test('one ankle rising is not a jump', () {
+      final c = jumpSquat();
+      final reps = <RepResult>[];
+      const frames = [
+        (175.0, 0.0),
+        (140.0, 0.0),
+        (100.0, 0.0),
+        (165.0, 0.0),
+        (175.0, 0.5),
+        (175.0, 0.5),
+        (175.0, 0.5),
+        (175.0, 0.5),
+        (175.0, 0.0),
+      ];
+      for (var i = 0; i < frames.length; i++) {
+        final (knee, left) = frames[i];
+        final r = c.update(knee, {
+          'knee_angle': knee,
+          'jump_rise_left': left,
+          'jump_rise_right': 0,
+        }, i * 100);
+        if (r != null) reps.add(r);
+      }
+      expect(reps.length, 1);
+      expect(reps.first.atDeepest['jump_height'], 0);
+    });
+
+    // (knee, left ankle rise, right ankle rise), 100 ms apart.
+    List<RepResult> rawFeed(
+      RepCounter c,
+      List<(double, double, double)> frames,
+    ) {
+      final reps = <RepResult>[];
+      for (var i = 0; i < frames.length; i++) {
+        final (knee, left, right) = frames[i];
+        final r = c.update(knee, {
+          'knee_angle': knee,
+          'jump_rise_left': left,
+          'jump_rise_right': right,
+        }, i * 100);
+        if (r != null) reps.add(r);
+      }
+      return reps;
+    }
+
+    test('the jump is measured from the lowest ankle before takeoff', () {
+      // The rep starts while the ankles still read 0.08 high (mid-motion).
+      final reps = rawFeed(jumpSquat(), const [
+        (175.0, 0.08, 0.08),
+        (140.0, 0.08, 0.08),
+        (110.0, 0.0, 0.0),
+        (100.0, 0.0, 0.0),
+        (160.0, 0.0, 0.0),
+        (175.0, 0.20, 0.20),
+        (176.0, 0.05, 0.05),
+        (130.0, 0.0, 0.0),
+        (140.0, 0.0, 0.0),
+        (160.0, 0.0, 0.0),
+        (170.0, 0.0, 0.0),
+        (175.0, 0.0, 0.0),
+      ]);
+      expect(reps.length, 1);
+      expect(reps.first.atDeepest['jump_height'], closeTo(0.20, 1e-9));
+      expect(reps.first.endMs, 1100); // landed at 600, plus 500 ms
+    });
+
+    test('one ankle down counts as landing', () {
+      // The far ankle keeps reading 0.16 to 0.20 after landing.
+      final reps = rawFeed(jumpSquat(), const [
+        (175.0, 0.0, 0.0),
+        (140.0, 0.0, 0.0),
+        (100.0, 0.0, 0.0),
+        (160.0, 0.0, 0.0),
+        (175.0, 0.30, 0.30),
+        (176.0, 0.40, 0.40),
+        (170.0, 0.05, 0.20),
+        (130.0, 0.0, 0.18),
+        (140.0, 0.0, 0.17),
+        (160.0, 0.0, 0.16),
+        (170.0, 0.0, 0.16),
+        (175.0, 0.0, 0.16),
+      ]);
+      expect(reps.length, 1);
+      expect(reps.first.endMs, 1100); // landed at 600, plus 500 ms
+      expect(reps.first.atDeepest['landing_knee_min'], 130);
+    });
+
+    // Phone check, Nov 17: quick back-to-back jumps merged, and standing up
+    // slowly after a landing was counted as an extra rep.
+    RepCounter tuned() => RepCounter(
+      direction: Direction.dip,
+      startThreshold: 150,
+      completeThreshold: 160,
+      jumpLimit: 0.10,
+    );
+
+    test('back-to-back jumps are separate reps', () {
+      final c = tuned();
+      final reps = rawFeed(c, const [
+        (175.0, 0.0, 0.0), (140.0, 0.0, 0.0), (100.0, 0.0, 0.0),
+        (160.0, 0.0, 0.0), (175.0, 0.3, 0.3), (176.0, 0.4, 0.4),
+        (170.0, 0.05, 0.05), (120.0, 0.0, 0.0), (100.0, 0.0, 0.0),
+        (165.0, 0.0, 0.0), // land at 600, dip, push
+        (175.0, 0.3, 0.3), (176.0, 0.4, 0.4), (170.0, 0.05, 0.05),
+        (120.0, 0.0, 0.0), (100.0, 0.0, 0.0), (165.0, 0.0, 0.0),
+        (175.0, 0.3, 0.3), (176.0, 0.4, 0.4), (170.0, 0.05, 0.05),
+        (130.0, 0.0, 0.0), (140.0, 0.0, 0.0), (160.0, 0.0, 0.0),
+        (170.0, 0.0, 0.0), (175.0, 0.0, 0.0),
+      ]);
+      expect(c.count, 3);
+      expect(reps.map((r) => r.endMs), [1000, 1600, 2300]);
+      expect(reps.map((r) => r.endMs - r.durationMs), [100, 1000, 1600]);
+      expect(reps.map((r) => r.deepest), [100, 100, 100]);
+      expect(reps[2].atDeepest['landing_knee_min'], 130);
+    });
+
+    test('standing up slowly after a landing is not a rep', () {
+      final c = tuned();
+      final reps = rawFeed(c, const [
+        (175.0, 0.0, 0.0), (140.0, 0.0, 0.0), (100.0, 0.0, 0.0),
+        (160.0, 0.0, 0.0), (175.0, 0.3, 0.3), (176.0, 0.4, 0.4),
+        (170.0, 0.05, 0.05), (130.0, 0.0, 0.0), (120.0, 0.0, 0.0),
+        (125.0, 0.0, 0.0), (135.0, 0.0, 0.0),
+        (142.0, 0.0, 0.0), // landing window ends, knee still bent
+        (148.0, 0.0, 0.0), (155.0, 0.0, 0.0), (165.0, 0.0, 0.0),
+        (172.0, 0.0, 0.0), (172.0, 0.0, 0.0), (172.0, 0.0, 0.0),
+        (172.0, 0.0, 0.0), (172.0, 0.0, 0.0), (172.0, 0.0, 0.0),
+      ]);
+      expect(c.count, 1);
+      expect(reps.single.endMs, 1100);
+    });
+
+    test('a takeoff after the landing window starts a rep in the air', () {
+      final c = tuned();
+      final reps = rawFeed(c, const [
+        (175.0, 0.0, 0.0), (140.0, 0.0, 0.0), (100.0, 0.0, 0.0),
+        (160.0, 0.0, 0.0), (175.0, 0.3, 0.3), (176.0, 0.4, 0.4),
+        (170.0, 0.05, 0.05), (150.0, 0.0, 0.0), (120.0, 0.0, 0.0),
+        (100.0, 0.0, 0.0), (95.0, 0.0, 0.0),
+        (110.0, 0.0, 0.0), // rep 1 completes at 1100, still bent
+        (150.0, 0.0, 0.0), (165.0, 0.0, 0.0), (175.0, 0.3, 0.3), // takeoff
+        (176.0, 0.4, 0.4), (170.0, 0.05, 0.05), // land at 1600
+        (140.0, 0.0, 0.0), (150.0, 0.0, 0.0), (160.0, 0.0, 0.0),
+        (170.0, 0.0, 0.0), (175.0, 0.0, 0.0),
+      ]);
+      expect(c.count, 2);
+      expect(reps[1].endMs - reps[1].durationMs, 1100);
+      expect(reps[1].endMs, 2100);
+      expect(reps[1].deepest, 95); // the dip before the takeoff
+      expect(reps[1].atDeepest['jump_height'], closeTo(0.4, 1e-9));
+    });
+
+    test('ankle drift in a deep landing is not a takeoff', () {
+      // Phone check 2, Nov 17: in a deep landing the ankle points drifted up
+      // past the limit and were taken as a second takeoff.
+      final c = tuned();
+      final reps = rawFeed(c, const [
+        (175.0, 0.0, 0.0), (140.0, 0.0, 0.0), (100.0, 0.0, 0.0),
+        (160.0, 0.0, 0.0), (175.0, 0.3, 0.3), (176.0, 0.4, 0.4),
+        (170.0, 0.05, 0.05), // land at 600
+        (130.0, 0.08, 0.08), (110.0, 0.12, 0.12), (100.0, 0.13, 0.13),
+        (120.0, 0.08, 0.08),
+        (150.0, 0.02, 0.02), // landing window ends at 1100
+        (165.0, 0.0, 0.0), (175.0, 0.0, 0.0), (175.0, 0.0, 0.0),
+        (175.0, 0.0, 0.0), (175.0, 0.0, 0.0),
+      ]);
+      expect(c.count, 1);
+      expect(reps.single.endMs, 1100);
+      expect(reps.single.atDeepest['landing_knee_min'], 100);
+      expect(reps.single.atDeepest['jump_height'], closeTo(0.4, 1e-9));
+    });
+  });
+
+  test(
+    'lunges: each rep is credited to the front leg at its deepest frame',
+    () {
+      final c = squat();
+      const frames = [
+        (175.0, Side.left),
+        (140.0, Side.left),
+        (95.0, Side.right),
+        (100.0, Side.left),
+        (130.0, Side.left),
+        (165.0, Side.left),
+      ];
+      RepResult? done;
+      for (var i = 0; i < frames.length; i++) {
+        final (knee, leg) = frames[i];
+        done = c.update(knee, const {}, i * 200, leg: leg) ?? done;
+      }
+      expect(done!.leg, Side.right);
+    },
+  );
 }

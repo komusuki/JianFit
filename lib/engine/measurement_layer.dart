@@ -25,10 +25,18 @@ enum FrameStatus {
 }
 
 class FrameResult {
-  const FrameResult(this.status, this.tMs, [this.values = const {}]);
+  const FrameResult(
+    this.status,
+    this.tMs, [
+    this.values = const {},
+    this.frontLeg,
+  ]);
   final FrameStatus status;
   final int tMs;
   final Map<String, double> values;
+
+  /// Lunges: the front leg on this frame (formula v0.4). Null otherwise.
+  final Side? frontLeg;
 }
 
 /// What a measurement function can use for one frame.
@@ -38,13 +46,21 @@ class MeasurementContext {
     this.side,
     this.facing,
     this.bodyLen,
-    this.baseline,
-  );
+    this.baseline, {
+    this.front,
+    this.bodyLineEnd = Joint.ankle,
+  });
   final Map<int, Pt> lm;
   final Side side;
   final int facing;
   final double bodyLen;
   final Map<String, double> baseline;
+
+  /// Lunges: the front leg, or null when unknown (lunge measurements are NaN).
+  final Side? front;
+
+  /// End point of the body line for hip_sag.
+  final Joint bodyLineEnd;
 
   /// Point of a joint on the chosen side, or on [s] if given.
   Pt p(Joint j, [Side? s]) => lm[landmarkIndex(j, s ?? side)]!;
@@ -67,13 +83,58 @@ final Map<String, MeasureFn> measurementRegistry = {
     if (heel.c < minConfidence || base == null) return double.nan;
     return heightAbove(base, heel.y, c.bodyLen);
   },
+  // Jump squat: each ankle against the setup baseline. The rep counter uses
+  // the rise since the rep started, so the setup baseline cancels out (Day 9).
+  'jump_rise_left': (c) => _rise(c, Side.left),
+  'jump_rise_right': (c) => _rise(c, Side.right),
+  // Plank and push-ups.
+  'hip_sag': (c) =>
+      hipSag(c.p(Joint.shoulder), c.p(Joint.hip), c.p(c.bodyLineEnd)),
+  'elbow_under_shoulder': (c) =>
+      align(c.p(Joint.elbow), c.p(Joint.shoulder), c.bodyLen, c.facing).abs(),
+  // Lunges: the front leg's knee angle, the back knee's height above the
+  // floor, and how far the front knee is past its ankle.
+  'front_knee_angle': (c) {
+    final f = c.front;
+    if (f == null) return double.nan;
+    return jointAngle(
+      c.p(Joint.hip, f),
+      c.p(Joint.knee, f),
+      c.p(Joint.ankle, f),
+    );
+  },
+  'back_knee_height': (c) {
+    final f = c.front, floor = c.baseline['floor'];
+    if (f == null || floor == null) return double.nan;
+    final back = f == Side.left ? Side.right : Side.left;
+    return heightAbove(floor, c.p(Joint.knee, back).y, c.bodyLen);
+  },
+  'front_knee_over_ankle': (c) {
+    final f = c.front;
+    if (f == null) return double.nan;
+    return align(c.p(Joint.knee, f), c.p(Joint.ankle, f), c.bodyLen, c.facing);
+  },
+};
+
+double _rise(MeasurementContext c, Side s) {
+  final base = c.baseline['ankle_${s.name}'];
+  if (base == null) return double.nan;
+  return heightAbove(base, c.p(Joint.ankle, s).y, c.bodyLen);
+}
+
+/// Measurements that need the front leg.
+const _frontLegMeasurements = {
+  'front_knee_angle',
+  'back_knee_height',
+  'front_knee_over_ankle',
 };
 
 /// A thigh or shin and its median length during setup (formula v0.4).
 typedef SetupSegment = ({int a, int b, double length});
 
 class MeasurementLayer {
-  MeasurementLayer(this.config) {
+  MeasurementLayer(this.config)
+    : _usesFrontLeg = config.measurements.any(_frontLegMeasurements.contains) {
     for (final name in config.measurements) {
       if (!measurementRegistry.containsKey(name)) {
         throw ArgumentError('Unknown measurement: $name');
@@ -85,6 +146,8 @@ class MeasurementLayer {
   }
 
   final ExerciseConfig config;
+  final bool _usesFrontLeg;
+  Side? _front; // lunges: the front leg on the last judged frame
   final Map<String, MovingAverage> _smoothers = {};
   final List<Map<int, Pt>> _setupFrames = [];
   final List<SetupSegment> _segments = [];
@@ -154,6 +217,7 @@ class MeasurementLayer {
     _setupFrames.clear();
     _setupStartMs = null;
     _lastJudgedMs = null;
+    _front = null;
     for (final s in _smoothers.values) {
       s.reset();
     }
@@ -166,7 +230,24 @@ class MeasurementLayer {
     final bodyLen = _judgeableBodyLength(lm);
     if (bodyLen == null) return _notJudged(tMs);
 
-    final ctx = MeasurementContext(lm, side!, facing, bodyLen, baseline);
+    // Lunges: the front leg, with the v0.4 margin against flickering.
+    Side? front;
+    if (_usesFrontLeg) {
+      final la = lm[landmarkIndex(Joint.ankle, Side.left)];
+      final ra = lm[landmarkIndex(Joint.ankle, Side.right)];
+      if (la != null && ra != null) {
+        front = frontLeg(la, ra, facing, bodyLen, _front);
+      }
+    }
+    final ctx = MeasurementContext(
+      lm,
+      side!,
+      facing,
+      bodyLen,
+      baseline,
+      front: front,
+      bodyLineEnd: config.bodyLineEnd,
+    );
     final raw = {
       for (final name in config.measurements)
         name: measurementRegistry[name]!(ctx),
@@ -192,7 +273,8 @@ class MeasurementLayer {
       values[e.key] = _smoothers[e.key]!.add(e.value);
     }
     _lastJudgedMs = tMs;
-    return FrameResult(FrameStatus.judged, tMs, values);
+    if (front != null) _front = front;
+    return FrameResult(FrameStatus.judged, tMs, values, front);
   }
 
   /// A frame that can't be judged: nothing is smoothed and _lastJudgedMs

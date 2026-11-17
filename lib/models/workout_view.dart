@@ -12,6 +12,8 @@ class WorkoutView {
     this.cue,
     this.holdSeconds = 0,
     this.lastRepCorrect,
+    this.correctLeft = 0,
+    this.correctRight = 0,
   });
 
   /// A person is in the frame (engine: MeasurementLayer.hasPerson).
@@ -37,4 +39,9 @@ class WorkoutView {
 
   /// The latest rep's result, for green or red joints. Null before the first rep.
   final bool? lastRepCorrect;
+
+  /// One-sided exercises (lunges): correct reps per front leg (Day 9). When
+  /// to say "Switch legs" is still to agree with Member A.
+  final int correctLeft;
+  final int correctRight;
 }

@@ -85,3 +85,14 @@ RepVerdict judgeRep(
   for (final c in checks)
     CheckResult(c, checkValue(c, rep), c.limitFor(strictness)),
 ]);
+
+/// Judges one frame's values (holds such as the plank): every check reads the
+/// current smoothed value, whatever its "when".
+RepVerdict judgeValues(
+  Map<String, double> values,
+  List<FormCheck> checks,
+  Strictness strictness,
+) => RepVerdict([
+  for (final c in checks)
+    CheckResult(c, values[c.measurement], c.limitFor(strictness)),
+]);

@@ -14,11 +14,13 @@ class ExerciseConfig {
     required this.posture,
     required this.requiredJoints,
     required this.measurements,
-    required this.mainMeasurement,
-    required this.direction,
-    required this.startThreshold,
-    required this.completeThreshold,
+    this.mainMeasurement,
+    this.direction,
+    this.startThreshold,
+    this.completeThreshold,
     this.bothSidesJoints = const [],
+    this.jumpLimit,
+    this.bodyLineEnd = Joint.ankle,
   });
 
   final String id;
@@ -33,12 +35,21 @@ class ExerciseConfig {
   /// Measurement names from the Measurement catalog.
   final List<String> measurements;
 
-  final String mainMeasurement;
-  final Direction direction;
+  // The four rep fields are null for holds (type "hold"), which have no reps.
+  final String? mainMeasurement;
+  final Direction? direction;
 
   /// A rep starts when the main measurement passes this value.
-  final double startThreshold;
+  final double? startThreshold;
 
   /// A rep completes when it comes back past this value.
-  final double completeThreshold;
+  final double? completeThreshold;
+
+  /// Jump squat: both ankles must rise more than this (body lengths, since
+  /// the rep started) to count as a jump. Null for exercises without a jump.
+  final double? jumpLimit;
+
+  /// End point of the body line for hip_sag: ankle (plank, standard push-up)
+  /// or knee (knee push-up, glute bridge).
+  final Joint bodyLineEnd;
 }
