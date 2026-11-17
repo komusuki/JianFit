@@ -24,6 +24,9 @@ import 'workout_source.dart';
 // reverse-lunge_S01_side_correct_01.csv is a reverse_lunge clip.
 // A recording has no countdown, so playback waits on the frame where setup
 // finished until beginSet(), like a person holding still for the 3-2-1.
+// Each beginSet() starts a set from zero (WorkoutSource contract, same as
+// EngineWorkoutSource). Pause freezes the clip, so rest between sets uses none
+// of it, and the clip loops when it ends during a set, so every set can finish.
 // Hold exercises (plank) are not timed yet: the engine's hold timer comes on Day 9.
 class ReplayWorkoutSource implements WorkoutSource {
   ReplayWorkoutSource(this.exercise, {required this.strictness});
@@ -146,14 +149,26 @@ class ReplayWorkoutSource implements WorkoutSource {
         break;
       }
     }
-    if (_index >= _frames.length && _clock.isRunning) {
-      _clock.stop();
-      debugPrint('REPLAY finished: $_correct correct of $_attempted attempted');
+    if (_index >= _frames.length) {
+      if (_counting && _clock.isRunning) {
+        _restartClip(); // the set is not done yet: play the clip again
+      } else if (_clock.isRunning) {
+        _clock.stop();
+      }
     }
     if (changed) _publish();
   }
 
   static String _names(RepVerdict v) => v.failed.map((c) => c.name).join(', ');
+
+  /// Back to the first frame. Setup runs again, as if the person stepped back
+  /// into view, then counting continues.
+  void _restartClip() {
+    _runner?.reset();
+    _index = 0;
+    _clock.reset();
+    debugPrint('REPLAY clip ended: playing it again ($_correct correct so far)');
+  }
 
   void _publish() {
     if (_stopped) return;
@@ -196,17 +211,30 @@ class ReplayWorkoutSource implements WorkoutSource {
 
   @override
   void beginSet() {
+    // Same as EngineWorkoutSource.beginSet: a fresh set from zero.
+    _runner?.counter.reset();
+    _correct = 0;
+    _attempted = 0;
+    _cue = null;
+    _lastRepCorrect = null;
     _counting = true;
-    if (_waitingForCountdown) {
-      _waitingForCountdown = false;
-      if (!_manualPause) _clock.start();
+    _waitingForCountdown = false;
+    // The contract says counting begins, so a pause left over from the end of
+    // the last set is cleared here.
+    _manualPause = false;
+    if (_frames.isNotEmpty) {
+      if (_index >= _frames.length) _restartClip();
+      _clock.start();
     }
+    debugPrint('REPLAY set started');
+    _publish();
   }
 
   @override
   void pause() {
     _manualPause = true;
     _clock.stop();
+    _runner?.counter.reset(keepCount: true); // a half-done rep does not carry over
     _publish();
   }
 
