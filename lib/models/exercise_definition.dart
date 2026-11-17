@@ -232,8 +232,9 @@ class ExerciseDefinition {
       for (var i = 0; i < rawChecks.length; i++) {
         final check = r.formCheck(rawChecks[i], 'form_checks[$i]', [
           ...?measurements,
-          // Jump squat: values the rep counter adds to each rep.
+          // Values the rep counter adds to each rep.
           if (jumpLimit != null) ...repMeasurements,
+          if (measurements?.contains('heel_lift') ?? false) 'heel_rise',
         ]);
         if (check == null) continue;
         if (!names.add(check.name)) {

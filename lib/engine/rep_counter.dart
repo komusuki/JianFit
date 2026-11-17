@@ -24,6 +24,11 @@
 // startThreshold: feet can't leave the floor in a deep bend, and the ankle
 // points drift up at the bottom of a squat.
 //
+// Heel rise (v0.6, when the frames carry heel_lift): heel_rise = heel_lift at
+// the deepest frame minus heel_lift when the rep started. Measured from the
+// rep's own start, it cancels the heel baseline drifting between reps
+// (standing a little closer or farther, the heel point sliding).
+//
 // Lunges (Day 9): update() takes the frame's front leg, and each rep is
 // credited to the leg in front at its deepest frame (RepResult.leg).
 
@@ -100,6 +105,7 @@ class RepCounter {
   final Map<String, double> _max = {};
   int _startMs = 0;
   Side? _legAtExtreme;
+  double? _startHeel; // heel_lift when the rep started
 
   // Jump squat state for the rep in progress.
   double? _riseStartL, _riseStartR; // lowest jump_rise values before the jump
@@ -169,6 +175,7 @@ class RepCounter {
     _track(values);
     _riseStartL = values['jump_rise_left'];
     _riseStartR = values['jump_rise_right'];
+    _startHeel = values['heel_lift'];
   }
 
   /// A takeoff with no rep in progress: the rep starts at [startMs] (when the
@@ -197,6 +204,7 @@ class RepCounter {
     _jumpHeight = lower;
     _airborne = true;
     _jumped = true;
+    _startHeel = null; // no standing frame to measure the heel from
   }
 
   RepResult? _readyJump(
@@ -350,9 +358,13 @@ class RepCounter {
       reset(keepCount: true); // formula v0.4.2: too short to be a real rep
       return null;
     }
-    // Jump squat: rep-level values for the form checks, readable with any
-    // "when" (bottom or throughout).
+    // Rep-level values for the form checks, readable with any "when" (bottom
+    // or throughout): heel_rise (squat), jump_height and landing_knee_min
+    // (jump squat).
+    final startHeel = _startHeel, deepHeel = _atExtreme['heel_lift'];
     final repValues = <String, double>{
+      if (startHeel != null && deepHeel != null)
+        'heel_rise': deepHeel - startHeel,
       if (jumpLimit != null && _riseStartL != null && _riseStartR != null)
         'jump_height': _jumpHeight,
       if (jumpLimit != null && _landingMin != null)
@@ -380,6 +392,7 @@ class RepCounter {
     _legAtExtreme = null;
     _min.clear();
     _max.clear();
+    _startHeel = null;
     _riseStartL = null;
     _riseStartR = null;
     _jumpHeight = 0;

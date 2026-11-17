@@ -291,6 +291,36 @@ def test_ankle_drift_in_a_deep_landing_is_not_a_takeoff():
     assert abs(reps[0].at_deepest["jump_height"] - 0.4) < 1e-9
 
 
+# Heel rise (formula v0.6): measured from the rep's own start, so a heel baseline that has
+# drifted between reps (here -0.05) does not count as a lift. Same frames in rep_counter_test.dart.
+def heel_feed(c, frames):
+    reps = []
+    for i, (knee, heel) in enumerate(frames):
+        values = {"knee_angle": knee} if heel is None else {"knee_angle": knee, "heel_lift": heel}
+        r = c.update(knee, values, i * 300)
+        if r:
+            reps.append(r)
+    return reps
+
+
+def test_heel_rise_is_measured_from_the_rep_start():
+    c = RepCounter("dip", 150, 160)
+    reps = heel_feed(c, [(175, -0.05), (140, -0.05), (100, 0.0), (130, -0.04), (165, -0.05)])
+    assert len(reps) == 1
+    r = reps[0]
+    assert abs(r.at_deepest["heel_rise"] - 0.05) < 1e-9      # -0.05 at the start, 0.0 at the bottom
+    assert abs(r.max_during["heel_rise"] - 0.05) < 1e-9      # one value per rep, any "when"
+
+
+def test_no_heel_rise_without_heel_lift():
+    c = RepCounter("dip", 150, 160)
+    reps = heel_feed(c, [(175, None), (140, None), (100, None), (165, None)])
+    assert len(reps) == 1 and "heel_rise" not in reps[0].at_deepest
+    reps = heel_feed(RepCounter("dip", 150, 160),
+                     [(175, 0.0), (140, None), (100, 0.02), (165, 0.0)])   # start frame had none
+    assert "heel_rise" not in reps[0].at_deepest
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
