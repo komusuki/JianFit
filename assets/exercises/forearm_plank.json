@@ -19,7 +19,7 @@
   },
   "form_checks": [
     {
-      "name": "hips_sagging",
+      "name": "hips_sag",
       "category": "safety",
       "measurement": "hip_sag",
       "max": 15,
@@ -27,7 +27,7 @@
       "priority": 1
     },
     {
-      "name": "hips_too_high",
+      "name": "hips_raised",
       "category": "cleanliness",
       "measurement": "hip_sag",
       "min": {"beginner": -15, "standard": -10, "strict": -6},
