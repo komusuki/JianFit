@@ -10,6 +10,7 @@ import '../services/replay_workout_source.dart';
 import '../services/settings_service.dart';
 import '../services/workout_source.dart';
 import 'setup_check_screen.dart';
+import '../widgets/number_picker.dart';
 
 class ExerciseDetailScreen extends StatefulWidget {
   const ExerciseDetailScreen({
@@ -101,7 +102,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
           Text('${e.cameraView} view. ${e.placement}'),
           const SizedBox(height: 16),
           Text('Target', style: textTheme.titleMedium),
-          _NumberPicker(
+          NumberPicker(
             label: _isHold ? 'Seconds per set' : 'Correct reps per set',
             value: _target,
             min: _isHold ? 10 : 1,
@@ -109,7 +110,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
             step: _isHold ? 5 : 1,
             onChanged: (v) => setState(() => _target = v),
           ),
-          _NumberPicker(
+          NumberPicker(
             label: 'Sets',
             value: _sets,
             min: 1,
@@ -117,7 +118,7 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
             step: 1,
             onChanged: (v) => setState(() => _sets = v),
           ),
-          _NumberPicker(
+          NumberPicker(
             label: 'Rest between sets (seconds)',
             value: _restSeconds,
             min: 15,
@@ -172,38 +173,3 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
   }
 }
 
-class _NumberPicker extends StatelessWidget {
-  const _NumberPicker({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.step,
-    required this.onChanged,
-  });
-
-  final String label;
-  final int value;
-  final int min;
-  final int max;
-  final int step;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Text(label)),
-        IconButton(
-          icon: const Icon(Icons.remove),
-          onPressed: value - step >= min ? () => onChanged(value - step) : null,
-        ),
-        SizedBox(width: 48, child: Text('$value', textAlign: TextAlign.center)),
-        IconButton(
-          icon: const Icon(Icons.add),
-          onPressed: value + step <= max ? () => onChanged(value + step) : null,
-        ),
-      ],
-    );
-  }
-}
