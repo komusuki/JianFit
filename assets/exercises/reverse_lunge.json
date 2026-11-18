@@ -1,0 +1,61 @@
+{
+  "id": "reverse_lunge",
+  "name": "Reverse lunge",
+  "pattern": "Lunge",
+  "level": "Beginner",
+  "type": "reps",
+  "camera": {
+    "view": "Side",
+    "orientation": "portrait",
+    "placement": "Phone at hip height, 2 to 3 meters away, facing your side."
+  },
+  "tracking": {
+    "posture": "standing",
+    "required_joints": ["shoulder", "hip", "knee", "ankle"],
+    "both_sides_joints": ["hip", "knee", "ankle"],
+    "measurements": ["front_knee_angle", "back_knee_height", "front_knee_over_ankle", "torso_lean"],
+    "main_measurement": "front_knee_angle",
+    "direction": "dip",
+    "start_threshold": 150,
+    "complete_threshold": 160,
+    "one_sided": true
+  },
+  "form_checks": [
+    {
+      "name": "knee_past_ankle",
+      "category": "safety",
+      "measurement": "front_knee_over_ankle",
+      "when": "bottom",
+      "max": 0.37,
+      "cue": "Keep your front knee over your ankle.",
+      "priority": 1
+    },
+    {
+      "name": "shallow_front_knee",
+      "category": "range",
+      "measurement": "front_knee_angle",
+      "when": "bottom",
+      "max": 90,
+      "cue": "Bend your front knee more.",
+      "priority": 2
+    },
+    {
+      "name": "back_knee_high",
+      "category": "range",
+      "measurement": "back_knee_height",
+      "when": "bottom",
+      "max": 0.6,
+      "cue": "Lower your back knee.",
+      "priority": 3
+    },
+    {
+      "name": "torso_lean",
+      "category": "cleanliness",
+      "measurement": "torso_lean",
+      "when": "bottom",
+      "max": {"beginner": 18, "standard": 18, "strict": 18},
+      "cue": "Keep your chest up.",
+      "priority": 4
+    }
+  ]
+}
