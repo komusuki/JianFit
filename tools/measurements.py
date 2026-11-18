@@ -68,7 +68,7 @@ EXERCISES = {
     "reverse-lunge": _LUNGE,
     "forearm-plank": dict(pose="floor", side=[SHOULDER, ELBOW, HIP, ANKLE], both=[],
                           baseline=False, main=None, direction="hold", end=ANKLE,
-                          measurements=["hip_sag", "elbow_under_shoulder"]),
+                          measurements=["hip_sag", "elbow_under_shoulder", "torso_lean"]),
     "glute-bridge": dict(pose="floor", side=[SHOULDER, HIP, KNEE, ANKLE], both=[],
                          baseline=False, main="hip_angle", direction="hill", end=KNEE,
                          measurements=["hip_angle", "knee_angle", "hip_sag"]),

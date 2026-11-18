@@ -33,6 +33,9 @@ PLAUSIBLE_MIN_ANGLE_DEG = 30   # a joint angle below this is impossible here: fr
 PLAUSIBLE_LENGTH_CHANGE = 0.4  # thigh or shin length more than 40% off its setup length: unjudgeable
 # Added in v0.5.
 STILL_MAX_MOVE = 0.1          # setup restarts when a required joint moves more than this (body lengths)
+# Added in v0.5.1 (engine settings, lib/engine/constants.dart).
+HOLD_BREAK_MS = 500           # holds: a check must fail this long before the hold counts as broken
+HOLD_MIN_LEAN_DEG = 60        # floor holds (plank): in position only while torso_lean is at least this
 
 # ---- Landmark numbers (left, right) from the Landmark map section ----
 EAR = (7, 8)

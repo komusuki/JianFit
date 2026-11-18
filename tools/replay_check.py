@@ -28,6 +28,14 @@ tab links video_id to file_name. The Reps tab takes two kinds of rows, and a vid
                outside every range are listed but not counted. Side accuracy is skipped.
 Reps whose notes contain "exclude" are left out of form agreement (they still count as reps).
 
+Holds (forearm plank): instead of counting reps, every judged frame goes to the hold timer
+(hold_timer.py, the mirror of lib/engine/hold_timer.dart). Every label row is a time range
+(rep_number is ignored), and each in-position frame in it is judged against the label:
+  form agreement  = in-position frames where the checks agree with the label   (target 85%)
+  hold time       = seconds the timer counted inside "correct" ranges vs their length, and
+                    seconds wrongly counted inside mistake ranges (should be 0)
+Breaks (a check failing for HOLD_BREAK_MS, when the app gives a cue) are listed with their time.
+
 Scores (written to the console and to replay_results_<exercise>.csv in the csv folder):
   count accuracy  = 1 - sum over videos of |detected - labeled| / total labeled   (target 95%)
   form agreement  = matched reps where the checks agree with the label            (target 85%)
@@ -43,6 +51,7 @@ from pathlib import Path
 
 from measurements import EXERCISES, exercise_id
 from form_judge import STRICTNESS, check_value, judge_rep, read_form_checks
+from hold_timer import NOT_IN_POSITION, HoldTimer, judge_values
 from rep_counter import RepCounter
 
 TUNING_DIR = Path(__file__).parent / "tuning"
@@ -77,7 +86,8 @@ def load_settings(ex_slug, ex):
     allowed = (ex["measurements"] + (["jump_height", "landing_knee_min"] if jump_limit else [])
                + (["heel_rise"] if "heel_lift" in ex["measurements"] else []))
     checks, problems = read_form_checks(data.get("form_checks"), allowed)
-    if not isinstance(start, (int, float)) or not isinstance(complete, (int, float)):
+    if ex["main"] is not None and (not isinstance(start, (int, float))
+                                   or not isinstance(complete, (int, float))):
         problems.append("start_threshold and complete_threshold must be numbers")
     if problems:
         sys.exit(f"{path.name} has {len(problems)} problem(s):\n" + "\n".join(f"  - {p}" for p in problems))
@@ -124,6 +134,98 @@ def detect_reps(csv_path, ex, start, complete, jump_limit=None):
             if rep:
                 reps.append(rep)
     return reps
+
+
+def detect_hold(csv_path, ex, checks, strictness):
+    """Feed judged frames to the hold timer. Returns (seconds held, breaks, frames):
+    breaks are (t_ms, failed check names); frames are (t_ms, state, failed check names,
+    seconds added on this frame) for every judged frame."""
+    timer = HoldTimer(checks, strictness)
+    names = ex["measurements"]
+    breaks, frames = [], []
+    with open(csv_path, newline="") as fh:
+        for row in csv.DictReader(fh):
+            if row["status"] != "ok":
+                continue                                # unjudgeable: the timer gets no frame
+            values = {n: to_float(row[n]) for n in names if to_float(row[n]) is not None}
+            t, before = float(row["t_ms"]), timer.seconds
+            verdict = timer.update(values, t)
+            if verdict:
+                breaks.append((t, [c.name for c in verdict.failed]))
+            failed = ([] if timer.state == NOT_IN_POSITION
+                      else [c.name for c in judge_values(values, checks, strictness).failed])
+            frames.append((t, timer.state, failed, timer.seconds - before))
+    return timer.seconds, breaks, frames
+
+
+def hold_main(args, folder, ex, settings_path, checks, csvs, labels):
+    """Replay check for holds: hold time and per-frame form agreement against label ranges."""
+    print(f"Replay check: {args.exercise} (hold)   (settings: {settings_path.parent.name}/"
+          f"{settings_path.name}, strictness {args.strictness})")
+    for c in checks:
+        fails = f"> {c.limit_for(args.strictness):g}" if c.kind == "max" else f"< {c.limit_for(args.strictness):g}"
+        print(f"  Check {c.name}: fails if {c.measurement} {fails} ({c.category})")
+    print()
+
+    names = {c.name for c in checks}
+    results = []
+    tot = dict(judged=0, agree=0, correct_sec=0.0, held_in_correct=0.0, held_in_mistakes=0.0)
+    for n, csv_path in enumerate(csvs, start=1):
+        stem = csv_path.parent.name
+        subject = stem.split("_")[1].upper() if "_" in stem else "?"
+        held, breaks, frames = detect_hold(csv_path, ex, checks, args.strictness)
+        print(f"[{n}/{len(csvs)}] {stem}")
+        print(f"    Timer: {held:.1f} s held, {len(breaks)} break(s)")
+        for t, failed in breaks:
+            print(f"      break at {t / 1000:.2f} s: {', '.join(failed)}")
+            results.append(dict(video=stem, subject=subject, break_sec=round(t / 1000, 2),
+                                fired=";".join(failed), result="hold broken (cue)"))
+        for lab in labels.get(stem.lower(), []):
+            label, start, end = lab["label"], lab["start_ms"], lab["end_ms"]
+            inside = [fr for fr in frames if start <= fr[0] <= end]
+            judged = [fr for fr in inside if fr[1] != NOT_IN_POSITION]
+            secs = sum(fr[3] for fr in inside)
+            fired = sorted({name for fr in judged for name in fr[2]})
+            row = dict(video=stem, subject=subject, label=label, label_start_sec=start / 1000,
+                       label_end_sec=end / 1000, notes=lab["notes"], judged_frames=len(judged),
+                       not_in_position=len(inside) - len(judged), held_sec=round(secs, 2),
+                       fired=";".join(fired))
+            if "exclude" in lab["notes"].lower() or not label:
+                row["result"] = "excluded from form agreement"
+            elif label != "correct" and label not in names:
+                row["result"] = f"label '{label}' has no check in {settings_path.name}"
+            else:
+                agree = sum(1 for fr in judged if (not fr[2] if label == "correct" else label in fr[2]))
+                row.update(agree_frames=agree, agreement=round(pct(agree, len(judged)), 1))
+                row["result"] = f"{agree}/{len(judged)} frames agree"
+                tot["judged"] += len(judged)
+                tot["agree"] += agree
+                if label == "correct":
+                    tot["correct_sec"] += (end - start) / 1000
+                    tot["held_in_correct"] += secs
+                else:
+                    tot["held_in_mistakes"] += secs
+            print(f"    {start / 1000:g} to {end / 1000:g} s, {label or 'no label'}: {row['result']}, "
+                  f"timer {secs:.1f} s" + (f", checks fired: {row['fired']}" if row["fired"] else ""))
+            results.append(row)
+        print()
+
+    out_csv = folder / f"replay_results_{args.exercise}.csv"
+    cols = []
+    for r in results:
+        cols += [k for k in r if k not in cols]
+    with open(out_csv, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=cols)
+        w.writeheader()
+        w.writerows(results)
+    if tot["judged"]:
+        print(f"Overall:  form agreement {pct(tot['agree'], tot['judged']):.1f}% (target {TARGET_FORM}%), "
+              f"{tot['agree']}/{tot['judged']} in-position frames")
+        if tot["correct_sec"]:
+            print(f"          hold time in correct ranges {tot['held_in_correct']:.1f} of "
+                  f"{tot['correct_sec']:.1f} s ({pct(tot['held_in_correct'], tot['correct_sec']):.0f}%)")
+        print(f"          timer kept running in mistake ranges: {tot['held_in_mistakes']:.1f} s (should be 0)")
+    print(f"\nDetails: {out_csv}")
 
 
 def run_checks(rep, checks, strictness):
@@ -202,8 +304,6 @@ def main():
 
     folder = Path(args.folder)
     ex = EXERCISES[args.exercise]
-    if ex["main"] is None:
-        sys.exit(f"{args.exercise} is a hold; replay_check.py handles rep exercises only.")
     settings_path, start, complete, checks, jump_limit = load_settings(args.exercise, ex)
     csvs = find_measurement_csvs(folder, args.exercise)
     if args.subjects:
@@ -212,6 +312,9 @@ def main():
     if not csvs:
         sys.exit(f"No {args.exercise} measurement files in {folder}. Run measurements.py first.")
     labels = load_labels(args.labels) if args.labels else {}
+    if ex["main"] is None:
+        hold_main(args, folder, ex, settings_path, checks, csvs, labels)
+        return
 
     direction = "below" if ex["direction"] == "dip" else "above"
     print(f"Replay check: {args.exercise}   (settings: {settings_path.parent.name}/{settings_path.name}, "
