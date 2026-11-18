@@ -72,8 +72,10 @@ def load_settings(ex_slug, ex):
     else:
         sys.exit(f"No exercise file {asset} and no tuning file {tuning}. "
                  f"Copy tuning/forward_lunge.json and edit it for {ex_slug}.")
-    # Jump squat: the rep counter adds jump_height and landing_knee_min to each rep.
-    allowed = ex["measurements"] + (["jump_height", "landing_knee_min"] if jump_limit else [])
+    # Values the rep counter adds to each rep: jump_height and landing_knee_min (jump squat),
+    # heel_rise (exercises that measure heel_lift).
+    allowed = (ex["measurements"] + (["jump_height", "landing_knee_min"] if jump_limit else [])
+               + (["heel_rise"] if "heel_lift" in ex["measurements"] else []))
     checks, problems = read_form_checks(data.get("form_checks"), allowed)
     if not isinstance(start, (int, float)) or not isinstance(complete, (int, float)):
         problems.append("start_threshold and complete_threshold must be numbers")

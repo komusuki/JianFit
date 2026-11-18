@@ -55,8 +55,12 @@ void main() {
     expect(d.info.cameraView, 'Side');
     expect(d.orientation, 'portrait');
     expect(d.oneSided, isFalse);
-    // heels_down removed Nov 16 until the heel measurement is fixed (v0.6).
-    expect(d.formChecks.map((c) => c.name), ['shallow_depth', 'forward_lean']);
+    // heels_down back Nov 17 on heel_rise (formula v0.6), provisional.
+    expect(d.formChecks.map((c) => c.name), [
+      'shallow_depth',
+      'forward_lean',
+      'heels_down',
+    ]);
 
     final depth = d.formChecks[0];
     expect(depth.category, CheckCategory.range);
@@ -69,6 +73,22 @@ void main() {
     expect(lean.limitFor(Strictness.beginner), 55);
     expect(lean.limitFor(Strictness.standard), 50);
     expect(lean.limitFor(Strictness.strict), 45);
+
+    final heels = d.formChecks[2];
+    expect(heels.measurement, 'heel_rise');
+    expect(heels.timing, CheckWhen.bottom);
+    expect(heels.limitFor(Strictness.beginner), 0.035);
+    expect(heels.limitFor(Strictness.standard), 0.03);
+    expect(heels.limitFor(Strictness.strict), 0.025);
+  });
+
+  test('heel_rise needs heel_lift in the measurements', () {
+    final j = squatJson();
+    (j['tracking']['measurements'] as List).remove('heel_lift');
+    expect(
+      problemsIn(j, 'bodyweight_squat.json').join('\n'),
+      contains("'heel_rise'"),
+    );
   });
 
   test('the squat file matches the test settings (squat_config.dart)', () {

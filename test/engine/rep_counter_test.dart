@@ -388,4 +388,53 @@ void main() {
       expect(done!.leg, Side.right);
     },
   );
+
+  // Heel rise (formula v0.6): measured from the rep's own start, so a heel
+  // baseline that has drifted between reps (here -0.05) is not a lift. Same
+  // frames in tools/test_rep_counter.py.
+  List<RepResult> heelFeed(List<(double, double?)> frames) {
+    final c = squat();
+    final reps = <RepResult>[];
+    for (var i = 0; i < frames.length; i++) {
+      final (knee, heel) = frames[i];
+      final r = c.update(knee, {
+        'knee_angle': knee,
+        'heel_lift': ?heel,
+      }, i * 300);
+      if (r != null) reps.add(r);
+    }
+    return reps;
+  }
+
+  test('heel_rise is measured from the rep start', () {
+    final reps = heelFeed(const [
+      (175.0, -0.05),
+      (140.0, -0.05),
+      (100.0, 0.0),
+      (130.0, -0.04),
+      (165.0, -0.05),
+    ]);
+    expect(reps.length, 1);
+    expect(reps.single.atDeepest['heel_rise'], closeTo(0.05, 1e-9));
+    expect(reps.single.maxDuring['heel_rise'], closeTo(0.05, 1e-9));
+  });
+
+  test('no heel_rise without heel_lift at the start and the bottom', () {
+    expect(
+      heelFeed(const [
+        (175.0, null),
+        (140.0, null),
+        (100.0, null),
+        (165.0, null),
+      ]).single.atDeepest.containsKey('heel_rise'),
+      isFalse,
+    );
+    expect(
+      heelFeed(const [(175.0, 0.0), (140.0, null), (100.0, 0.02), (165.0, 0.0)])
+          .single
+          .atDeepest
+          .containsKey('heel_rise'),
+      isFalse,
+    );
+  });
 }

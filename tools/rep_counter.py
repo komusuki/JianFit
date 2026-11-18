@@ -25,12 +25,20 @@ completed while the knee was still bent, a new rep only starts once the knee has
 or at the next takeoff, so standing up slowly after a landing is not a rep.
 A takeoff (and jump_height) only counts while the knee is extended past start_threshold: feet
 can't leave the floor in a deep bend, and the ankle points drift up at the bottom of a squat.
+
+Heel rise (v0.6, when the frames carry heel_lift): heel_rise = heel_lift at the deepest frame minus
+heel_lift when the rep started. Measured from the rep's own start, it cancels the heel baseline
+drifting between reps (standing a little closer or farther, the heel point sliding).
 """
 from dataclasses import dataclass, field
 
 from formulas import JUMP_WAIT_MS, LANDING_WINDOW_MS, MIN_REP_MS, REP_TURNAROUND_DEG
 
 READY, GOING_DOWN, COMING_UP = "ready", "goingDown", "comingUp"
+
+
+def _number(v):
+    return isinstance(v, (int, float)) and v == v      # not None, not text, not NaN
 
 
 @dataclass
@@ -67,6 +75,7 @@ class RepCounter:
         self._min = {}
         self._max = {}
         self._start_ms = 0
+        self._start_heel = None                   # heel_lift when the rep started
         self._clear_jump()
         self._clear_ready(None)
 
@@ -133,6 +142,7 @@ class RepCounter:
         self._track(values)
         self._rise_start_l = values.get("jump_rise_left")
         self._rise_start_r = values.get("jump_rise_right")
+        self._start_heel = values.get("heel_lift")
 
     def _start_in_air(self, start_ms, extreme, at_extreme, l0, r0, lower, values):
         """A takeoff with no rep in progress: the rep starts at start_ms (when the previous rep
@@ -148,6 +158,7 @@ class RepCounter:
         self._rise_start_l, self._rise_start_r = l0, r0
         self._jump_height = lower
         self._airborne = self._jumped = True
+        self._start_heel = None                   # no standing frame to measure the heel from
 
     def _ready_jump(self, main, values, t_ms):
         l, r = values.get("jump_rise_left"), values.get("jump_rise_right")
@@ -252,6 +263,9 @@ class RepCounter:
             self.reset(keep_count=True)         # too short to be a rep: drop it
             return None
         rep_values = {}
+        h0, h1 = self._start_heel, self._at_extreme.get("heel_lift")
+        if _number(h0) and _number(h1):
+            rep_values["heel_rise"] = h1 - h0
         if self.jump_limit is not None:
             if self._rise_start_l is not None and self._rise_start_r is not None:
                 rep_values["jump_height"] = self._jump_height
@@ -272,6 +286,7 @@ class RepCounter:
         self._at_extreme = {}
         self._min.clear()
         self._max.clear()
+        self._start_heel = None
         self._clear_jump()
         self._clear_ready(None)
         if not keep_count:
