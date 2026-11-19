@@ -14,10 +14,12 @@ import '../engine/rep_counter.dart';
 import '../models/exercise_definition.dart';
 import '../models/exercise_info.dart';
 import '../models/strictness.dart';
+import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 import '../widgets/skeleton_painter.dart';
 import 'cue_speaker.dart';
 import 'pose_service.dart';
+import 'rep_records.dart';
 import 'settings_service.dart';
 import 'workout_source.dart';
 
@@ -77,6 +79,7 @@ class EngineWorkoutSource implements WorkoutSource {
   int _correctRight = 0;
   String? _cue;
   bool? _lastRepCorrect;
+  final _setReps = <RepRecord>[]; // this set's reps, for saving (Member C)
 
   @override
   Stream<WorkoutView> get updates => _updates.stream;
@@ -196,6 +199,7 @@ class EngineWorkoutSource implements WorkoutSource {
     if (rep == null) return;
     final verdict = judgeRep(rep, exercise.formChecks, strictness);
     _attempted++;
+    _setReps.add(repRecordFrom(_attempted, rep, verdict));
     if (verdict.correct) {
       _correct++;
       if (rep.leg == Side.left) _correctLeft++;
@@ -325,8 +329,16 @@ class EngineWorkoutSource implements WorkoutSource {
     _correctRight = 0;
     _cue = null;
     _lastRepCorrect = null;
+    _setReps.clear();
     _counting = true;
     _publish();
+  }
+
+  @override
+  List<RepRecord> takeSetReps() {
+    final reps = List.of(_setReps);
+    _setReps.clear();
+    return reps;
   }
 
   @override

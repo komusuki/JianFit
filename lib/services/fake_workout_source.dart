@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models/exercise_info.dart';
+import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 import 'workout_source.dart';
 
@@ -33,6 +34,7 @@ class FakeWorkoutSource implements WorkoutSource {
   String? _cue;
   bool? _lastRepCorrect;
   double _hold = 0;
+  final _setReps = <RepRecord>[]; // made-up reps, so saving can be tried
 
   bool get _isHold => exercise.type == ExerciseType.hold;
 
@@ -81,6 +83,14 @@ class FakeWorkoutSource implements WorkoutSource {
         if (ok) _correct++;
         _lastRepCorrect = ok;
         _cue = ok ? null : 'Go lower.';
+        _setReps.add(
+          RepRecord(
+            repNumber: _attempted,
+            correct: ok,
+            durationMs: 3000,
+            failedChecks: ok ? const [] : const [FailedCheck(name: 'fake_check')],
+          ),
+        );
         if (_attempted == 5) _awayUntil = _tick + 30;
       }
     }
@@ -113,9 +123,17 @@ class FakeWorkoutSource implements WorkoutSource {
     _hold = 0;
     _cue = null;
     _lastRepCorrect = null;
+    _setReps.clear();
     _awayUntil = -1;
     _manualPause = false;
     _counting = true;
+  }
+
+  @override
+  List<RepRecord> takeSetReps() {
+    final reps = List.of(_setReps);
+    _setReps.clear();
+    return reps;
   }
 
   @override
