@@ -22,7 +22,7 @@
       "name": "hips_sag",
       "category": "safety",
       "measurement": "hip_sag",
-      "max": 15,
+      "max": 5,
       "cue": "Lift your hips. Keep a straight line.",
       "priority": 1
     },
@@ -30,7 +30,7 @@
       "name": "hips_raised",
       "category": "cleanliness",
       "measurement": "hip_sag",
-      "min": {"beginner": -15, "standard": -10, "strict": -6},
+      "min": {"beginner": -22, "standard": -16, "strict": -10},
       "cue": "Lower your hips.",
       "priority": 2
     },
@@ -38,7 +38,7 @@
       "name": "elbows_not_under_shoulders",
       "category": "cleanliness",
       "measurement": "elbow_under_shoulder",
-      "max": {"beginner": 0.4, "standard": 0.3, "strict": 0.2},
+      "max": {"beginner": 0.28, "standard": 0.23, "strict": 0.2},
       "cue": "Elbows under your shoulders.",
       "priority": 3
     }
