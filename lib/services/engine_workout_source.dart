@@ -62,7 +62,8 @@ class EngineWorkoutSource implements WorkoutSource {
   int _pendingMs = 0;
   bool _processing = false;
   bool _stopped = false;
-  int _frames = 0;
+  int _frames = 0; // processed frames since the last FPS line
+  int _cameraFrames = 0; // frames the camera delivered since the last FPS line
 
   // The latest processed frame, for the skeleton.
   Pose? _pose;
@@ -124,6 +125,7 @@ class EngineWorkoutSource implements WorkoutSource {
   }
 
   void _onFrame(CameraImage image) {
+    _cameraFrames++;
     final tMs = _clock.elapsedMilliseconds; // time the frame arrived
     if (_processing) {
       _pending = image; // keep only the newest frame
@@ -208,7 +210,7 @@ class EngineWorkoutSource implements WorkoutSource {
     _lastRepCorrect = verdict.correct;
     final cue = _cues.onRep(verdict, tMs);
     _cue = cue.text;
-    if (cue.speak) _speaker.speak(cue.text!);
+    if (cue.speak) _say(cue.text!, tMs);
     final names = verdict.failed.map((c) => c.name).join(', ');
     final result = verdict.correct ? 'correct' : 'attempted ($names)';
     final said = cue.text == null
@@ -264,12 +266,33 @@ class EngineWorkoutSource implements WorkoutSource {
     };
   }
 
+  // Speaks a cue and logs how long after the frame arrived it was decided
+  // (ML Kit plus the engine). CueSpeaker logs when the audio starts.
+  void _say(String text, int tMs) {
+    debugPrint(
+      'CUE decided ${_clock.elapsedMilliseconds - tMs} ms after its frame '
+          'arrived: "$text"',
+    );
+    _speaker.speak(text);
+  }
+
+  // Every 5 s: processed and camera frame rates and the average ML Kit time.
+  // Clearing inferenceMs here also stops the list growing for the whole set.
   void _logFps() {
     _frames++;
-    if (_fpsWatch.elapsedMilliseconds < 5000) return;
-    final fps = _frames * 1000 / _fpsWatch.elapsedMilliseconds;
-    debugPrint('ENGINE processed=${fps.toStringAsFixed(1)} fps');
+    final elapsedMs = _fpsWatch.elapsedMilliseconds;
+    if (elapsedMs < 5000) return;
+    final secs = elapsedMs / 1000;
+    final ms = _poseService.inferenceMs;
+    final mlkitMs = ms.isEmpty ? 0 : ms.reduce((a, b) => a + b) ~/ ms.length;
+    debugPrint(
+      'ENGINE processed=${(_frames / secs).toStringAsFixed(1)} fps  '
+          'camera=${(_cameraFrames / secs).toStringAsFixed(1)} fps  '
+          'mlkit=$mlkitMs ms',
+    );
     _frames = 0;
+    _cameraFrames = 0;
+    ms.clear();
     _fpsWatch.reset();
   }
 
