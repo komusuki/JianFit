@@ -8,8 +8,10 @@ import '../engine/geometry.dart';
 import '../engine/measurement_layer.dart';
 import '../models/exercise_info.dart';
 import '../models/strictness.dart';
+import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 import 'exercise_loader.dart';
+import 'rep_records.dart';
 import 'replay_runner.dart';
 import 'replay_source.dart';
 import 'workout_source.dart';
@@ -57,6 +59,7 @@ class ReplayWorkoutSource implements WorkoutSource {
   int _attempted = 0;
   String? _cue;
   bool? _lastRepCorrect;
+  final _setReps = <RepRecord>[]; // this set's reps, for saving
 
   @override
   Stream<WorkoutView> get updates => _updates.stream;
@@ -133,6 +136,7 @@ class ReplayWorkoutSource implements WorkoutSource {
       if (rep != null && verdict != null) {
         _attempted++;
         if (verdict.correct) _correct++;
+        _setReps.add(repRecordFrom(_attempted, rep, verdict));
         _lastRepCorrect = verdict.correct;
         _cue = verdict.topFailed?.cue;
         debugPrint(
@@ -221,6 +225,7 @@ class ReplayWorkoutSource implements WorkoutSource {
     _attempted = 0;
     _cue = null;
     _lastRepCorrect = null;
+    _setReps.clear();
     _counting = true;
     _waitingForCountdown = false;
     // The contract says counting begins, so a pause left over from the end of
@@ -232,6 +237,13 @@ class ReplayWorkoutSource implements WorkoutSource {
     }
     debugPrint('REPLAY set started');
     _publish();
+  }
+
+  @override
+  List<RepRecord> takeSetReps() {
+    final reps = List.of(_setReps);
+    _setReps.clear();
+    return reps;
   }
 
   @override

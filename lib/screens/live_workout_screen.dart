@@ -8,13 +8,17 @@ import '../models/exercise_info.dart';
 import '../models/strictness.dart';
 import '../models/workout_records.dart';
 import '../models/workout_view.dart';
+import '../services/database_service.dart';
 import '../services/workout_source.dart';
 import '../widgets/rest_view.dart';
+import 'session_summary_screen.dart';
 
 // Live workout screen (roadmap Part 10) for every set of one exercise:
 // counters, cue banner, rep result color, Pause and Stop, then rest between
 // sets (RestView) and a summary at the end. Reads only WorkoutView, so the
 // fake source and the engine both fit.
+// Saving (Member C): each set's reps come from source.takeSetReps(); Stop or
+// Done saves the session (a stopped set too) and opens SessionSummaryScreen.
 class LiveWorkoutScreen extends StatefulWidget {
   const LiveWorkoutScreen({
     super.key,
@@ -44,6 +48,10 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
   bool _resting = false;
   bool _finished = false;
   final _results = <String>[];
+  final _startedAt = DateTime.now();
+  final _sets = <SetRecord>[];
+  Future<int?>? _saving;
+  bool _leaving = false;
 
   bool get _isHold => widget.exercise.type == ExerciseType.hold;
 
@@ -64,13 +72,78 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     if (!reached) return;
     widget.source.pause();
     _results.add(_summary(v));
+    _sets.add(_setRecord(v));
     setState(() {
       if (_setNumber < widget.plan.sets) {
         _resting = true;
       } else {
         _finished = true;
+        _saving = _save();
       }
     });
+  }
+
+  /// The set that just ended (or was stopped), with its reps from the source.
+  SetRecord _setRecord(WorkoutView v) => SetRecord(
+    exerciseId: widget.plan.exerciseId,
+    setNumber: _setNumber,
+    targetReps: widget.plan.targetReps,
+    targetSeconds: widget.plan.targetSeconds,
+    holdSeconds: _isHold ? v.holdSeconds : null,
+    reps: widget.source.takeSetReps(),
+  );
+
+  /// Saves the session once. Null when nothing was done or saving failed.
+  Future<int?> _save() async {
+    final done = _sets.any(
+      (s) => s.reps.isNotEmpty || (s.holdSeconds ?? 0) >= 1,
+    );
+    if (!done) return null;
+    try {
+      return await DatabaseService.instance.saveSession(
+        SessionRecord(
+          startedAt: _startedAt,
+          endedAt: DateTime.now(),
+          mode: 'single',
+          strictness: widget.strictness.name,
+          sets: _sets,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Saving the session failed: $e');
+      return null;
+    }
+  }
+
+  /// Stop or Done: save what was done, then show the summary, or just go back
+  /// when there is nothing to show.
+  Future<void> _leave() async {
+    if (_leaving) return;
+    _leaving = true;
+    if (_saving == null) {
+      if (!_resting) {
+        final stopped = _setRecord(widget.source.current);
+        if (stopped.reps.isNotEmpty || (stopped.holdSeconds ?? 0) >= 1) {
+          _sets.add(stopped);
+        }
+      }
+      _saving = _save();
+    }
+    final id = await _saving;
+    if (!mounted) return;
+    if (id == null) {
+      Navigator.pop(context);
+      return;
+    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SessionSummaryScreen(
+          database: DatabaseService.instance,
+          sessionId: id,
+        ),
+      ),
+    );
   }
 
   String _summary(WorkoutView v) => _isHold
@@ -176,17 +249,14 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                         ),
                         icon: const Icon(Icons.stop),
                         label: const Text('Stop'),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: _leave,
                       ),
                     ),
                   ],
                 ),
               ),
               if (_finished)
-                _FinishedOverlay(
-                  results: _results,
-                  onDone: () => Navigator.pop(context),
-                ),
+                _FinishedOverlay(results: _results, onDone: _leave),
             ],
           );
         },

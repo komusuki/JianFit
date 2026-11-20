@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 
 // Anything that can drive the setup check and live workout screens.
@@ -22,6 +23,11 @@ abstract class WorkoutSource {
   /// Start a set: counts, cue and hold time restart from zero, then counting
   /// begins. Called once per set.
   void beginSet();
+
+  /// The reps of the set that just ended, for saving (Member C). Returns them
+  /// once: a second call before the next rep gives an empty list. Holds have
+  /// no reps; their time is WorkoutView.holdSeconds.
+  List<RepRecord> takeSetReps();
 
   /// The Pause and Resume buttons.
   void pause();
