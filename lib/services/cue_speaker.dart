@@ -9,15 +9,28 @@ const double cueSpeechRate = 0.35;
 // being spoken (QUEUE_FLUSH, the plugin's default), so the newest is heard.
 class CueSpeaker {
   final _tts = FlutterTts();
+  final _sinceSpeak = Stopwatch(); // speak() call to the start of the audio
 
   Future<void> init() async {
     final available = await _tts.isLanguageAvailable('en-US');
     debugPrint('TTS en-US available: $available');
     await _tts.setLanguage('en-US');
     await _tts.setSpeechRate(cueSpeechRate);
+    _tts.setStartHandler(() {
+      if (!_sinceSpeak.isRunning) return;
+      debugPrint(
+        'CUE audio started ${_sinceSpeak.elapsedMilliseconds} ms after speak()',
+      );
+      _sinceSpeak
+        ..stop()
+        ..reset();
+    });
   }
 
   Future<void> speak(String text) async {
+    _sinceSpeak
+      ..reset()
+      ..start();
     await _tts.speak(text);
   }
 
