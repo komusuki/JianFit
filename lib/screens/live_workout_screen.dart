@@ -22,6 +22,8 @@ import 'session_summary_screen.dart';
 // Done saves the session (a stopped set too) and opens SessionSummaryScreen.
 // Fatigue warnings (Member C, fatigue.dart): a red banner after 3 failed reps
 // in a row, and a note on the rest screen when a set falls behind set 1.
+// Exercise check (Member C, exercise_check.dart): the source's
+// exerciseWarning (wrong posture or no movement) in the same red banner.
 class LiveWorkoutScreen extends StatefulWidget {
   const LiveWorkoutScreen({
     super.key,
@@ -231,6 +233,10 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                     if (_warning != null) ...[
                       const SizedBox(height: 8),
                       _WarningBanner(text: _warning!),
+                    ],
+                    if (v.exerciseWarning != null) ...[
+                      const SizedBox(height: 8),
+                      _WarningBanner(text: v.exerciseWarning!),
                     ],
                   ],
                 ),

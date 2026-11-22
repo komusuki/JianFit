@@ -6,6 +6,7 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../engine/cue_manager.dart';
+import '../engine/exercise_check.dart';
 import '../engine/form_judge.dart';
 import '../engine/hold_timer.dart';
 import '../engine/landmarks.dart';
@@ -49,6 +50,8 @@ class EngineWorkoutSource implements WorkoutSource {
   final RepCounter? _counter; // rep exercises
   final HoldTimer? _hold; // hold exercises
   final _cues = CueManager();
+  late final _check = ExerciseCheck(exercise.config); // Member C
+  String? _checkMessage;
   final _speaker = CueSpeaker();
   final _poseService = PoseService();
   final _clock = Stopwatch(); // t_ms for the engine
@@ -178,11 +181,20 @@ class EngineWorkoutSource implements WorkoutSource {
     } else if (frame.status == FrameStatus.judged) {
       _autoPaused = false;
       if (_counting && !_manualPause) {
+        final repsBefore = _attempted;
         if (_hold != null) {
           _holdFrame(frame, tMs);
         } else {
           _count(frame, tMs);
         }
+        _checkMessage = _check.update(
+          lean: torsoLean(points, _layer.side),
+          main: _hold == null
+              ? frame.values[exercise.config.mainMeasurement]
+              : null,
+          tMs: tMs,
+          repDone: _attempted != repsBefore,
+        );
       }
     }
 
@@ -309,6 +321,7 @@ class EngineWorkoutSource implements WorkoutSource {
       lastRepCorrect: _lastRepCorrect,
       correctLeft: _correctLeft,
       correctRight: _correctRight,
+      exerciseWarning: _checkMessage,
     );
     _updates.add(_current);
   }
@@ -353,6 +366,8 @@ class EngineWorkoutSource implements WorkoutSource {
     _cue = null;
     _lastRepCorrect = null;
     _setReps.clear();
+    _check.reset();
+    _checkMessage = null;
     _counting = true;
     _publish();
   }
@@ -368,6 +383,8 @@ class EngineWorkoutSource implements WorkoutSource {
   void pause() {
     _manualPause = true;
     _counter?.reset(keepCount: true); // a half-done rep does not carry over
+    _check.reset();
+    _checkMessage = null;
     _publish();
   }
 
