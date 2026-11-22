@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../engine/exercise_check.dart';
 import '../engine/form_judge.dart';
 import '../engine/geometry.dart';
 import '../engine/measurement_layer.dart';
@@ -41,6 +42,8 @@ class ReplayWorkoutSource implements WorkoutSource {
   WorkoutView _current = const WorkoutView();
 
   ReplayRunner? _runner;
+  ExerciseCheck? _check;
+  String? _checkMessage;
   List<ReplayFrame> _frames = const [];
   ReplayFrame? _shown;
   String? _message = 'Loading replay...';
@@ -99,6 +102,7 @@ class ReplayWorkoutSource implements WorkoutSource {
     }
     if (_stopped || _frames.isEmpty) return;
     _runner = ReplayRunner(definition, strictness);
+    _check = ExerciseCheck(definition.config);
     _message = null;
     _startMs = _frames.first.tMs;
     debugPrint(
@@ -147,6 +151,14 @@ class ReplayWorkoutSource implements WorkoutSource {
           '${verdict.correct ? 'correct' : 'attempted (${_names(verdict)})'}',
         );
       }
+      if (_counting && !_manualPause && s.frame.status == FrameStatus.judged) {
+        _checkMessage = _check?.update(
+          lean: torsoLean(f.points, runner.layer.side),
+          main: s.frame.values[runner.exercise.config.mainMeasurement],
+          tMs: f.tMs,
+          repDone: rep != null,
+        );
+      }
       // Setup just finished: wait here until the countdown ends.
       if (!_counting && runner.layer.isReady) {
         _waitingForCountdown = true;
@@ -171,6 +183,7 @@ class ReplayWorkoutSource implements WorkoutSource {
   /// into view, then counting continues.
   void _restartClip() {
     _runner?.reset();
+    _check?.reset(); // the clip's clock starts over
     _index = 0;
     _clock.reset();
     debugPrint(
@@ -190,6 +203,7 @@ class ReplayWorkoutSource implements WorkoutSource {
       attempted: _attempted,
       cue: _cue,
       lastRepCorrect: _lastRepCorrect,
+      exerciseWarning: _checkMessage,
     );
     _updates.add(_current);
   }
@@ -226,6 +240,8 @@ class ReplayWorkoutSource implements WorkoutSource {
     _cue = null;
     _lastRepCorrect = null;
     _setReps.clear();
+    _check?.reset();
+    _checkMessage = null;
     _counting = true;
     _waitingForCountdown = false;
     // The contract says counting begins, so a pause left over from the end of
@@ -250,6 +266,8 @@ class ReplayWorkoutSource implements WorkoutSource {
   void pause() {
     _manualPause = true;
     _clock.stop();
+    _check?.reset();
+    _checkMessage = null;
     _runner?.counter.reset(
       keepCount: true,
     ); // a half-done rep does not carry over

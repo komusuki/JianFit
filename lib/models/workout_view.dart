@@ -14,6 +14,7 @@ class WorkoutView {
     this.lastRepCorrect,
     this.correctLeft = 0,
     this.correctRight = 0,
+    this.exerciseWarning,
   });
 
   /// A person is in the frame (engine: MeasurementLayer.hasPerson).
@@ -44,4 +45,8 @@ class WorkoutView {
   /// to say "Switch legs" is still to agree with Member A.
   final int correctLeft;
   final int correctRight;
+
+  /// Rule-based exercise check (Member C): wrong posture or no movement.
+  /// Null when everything looks right.
+  final String? exerciseWarning;
 }
