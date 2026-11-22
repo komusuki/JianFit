@@ -9,6 +9,7 @@ import '../models/strictness.dart';
 import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 import '../services/database_service.dart';
+import '../services/fatigue.dart';
 import '../services/workout_source.dart';
 import '../widgets/rest_view.dart';
 import 'session_summary_screen.dart';
@@ -19,6 +20,8 @@ import 'session_summary_screen.dart';
 // fake source and the engine both fit.
 // Saving (Member C): each set's reps come from source.takeSetReps(); Stop or
 // Done saves the session (a stopped set too) and opens SessionSummaryScreen.
+// Fatigue warnings (Member C, fatigue.dart): a red banner after 3 failed reps
+// in a row, and a note on the rest screen when a set falls behind set 1.
 class LiveWorkoutScreen extends StatefulWidget {
   const LiveWorkoutScreen({
     super.key,
@@ -52,6 +55,10 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
   final _sets = <SetRecord>[];
   Future<int?>? _saving;
   bool _leaving = false;
+  int _seenAttempted = 0; // reps of this set already looked at
+  int _failedStreak = 0;
+  String? _warning; // shown during the set
+  String? _restNote; // shown on the rest screen
 
   bool get _isHold => widget.exercise.type == ExerciseType.hold;
 
@@ -68,11 +75,18 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
   void _onUpdate(WorkoutView v) {
     // While resting or paused, the counts still belong to the set that ended.
     if (_resting || _finished || v.paused) return;
+    if (v.attempted > _seenAttempted) {
+      _seenAttempted = v.attempted;
+      _failedStreak = v.lastRepCorrect == false ? _failedStreak + 1 : 0;
+      final warning = warnDuringSet(_failedStreak);
+      if (warning != _warning) setState(() => _warning = warning);
+    }
     final reached = _isHold ? v.holdSeconds >= _target : v.correct >= _target;
     if (!reached) return;
     widget.source.pause();
     _results.add(_summary(v));
     _sets.add(_setRecord(v));
+    _restNote = warnAfterSet(_sets);
     setState(() {
       if (_setNumber < widget.plan.sets) {
         _resting = true;
@@ -154,6 +168,9 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     setState(() {
       _resting = false;
       _setNumber++;
+      _seenAttempted = 0;
+      _failedStreak = 0;
+      _warning = null;
     });
     widget.source.resume();
     widget.source.beginSet();
@@ -211,6 +228,10 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                       const SizedBox(height: 8),
                       _CueBanner(cue: v.cue!),
                     ],
+                    if (_warning != null) ...[
+                      const SizedBox(height: 8),
+                      _WarningBanner(text: _warning!),
+                    ],
                   ],
                 ),
               ),
@@ -220,7 +241,9 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                 RestView(
                   key: ValueKey(_setNumber),
                   seconds: widget.plan.restSec,
-                  lastSet: _results.last,
+                  lastSet: _restNote == null
+                      ? _results.last
+                      : '${_results.last}\n\n$_restNote',
                   next: 'Set ${_setNumber + 1} of ${widget.plan.sets}',
                   onDone: _startNextSet,
                 ),
@@ -342,6 +365,36 @@ class _CueBanner extends StatelessWidget {
             child: Text(
               cue,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fatigue warning during a set: red, so it stands apart from form cues.
+class _WarningBanner extends StatelessWidget {
+  const _WarningBanner({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade700,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber, color: Colors.white),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
             ),
           ),
         ],
