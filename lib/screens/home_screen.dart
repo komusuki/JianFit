@@ -3,14 +3,13 @@ import 'package:flutter/material.dart';
 import 'camera_test_screen.dart';
 import 'exercise_list_screen.dart';
 import 'settings_screen.dart';
+import '../services/database_service.dart';
+import 'history_screen.dart';
+import 'routine_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  void _notBuiltYet(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('$feature is not built yet')));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,13 +50,22 @@ class HomeScreen extends StatelessWidget {
             icon: Icons.list_alt,
             title: 'Custom Workout',
             subtitle: 'Build a routine with sets and rest',
-            onTap: () => _notBuiltYet(context, 'Custom Workout'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RoutineListScreen()),
+            ),
           ),
           _HomeCard(
             icon: Icons.history,
             title: 'History',
             subtitle: 'See your past sessions',
-            onTap: () => _notBuiltYet(context, 'History'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    HistoryScreen(database: DatabaseService.instance),
+              ),
+            ),
           ),
           const SizedBox(height: 24),
           TextButton.icon(
