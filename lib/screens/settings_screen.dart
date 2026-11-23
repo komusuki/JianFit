@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/app_palette.dart';
 import '../models/strictness.dart';
 import '../services/settings_service.dart';
+import 'camera_test_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -122,6 +123,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       setState(() => _replay = v);
                       SettingsService.saveReplayMode(v);
                     },
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.videocam),
+                    title: const Text('Camera test'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CameraTestScreen(),
+                      ),
+                    ),
                   ),
                 ],
               ],

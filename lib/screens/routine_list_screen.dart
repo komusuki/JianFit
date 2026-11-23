@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../models/workout_records.dart';
 import '../services/database_service.dart';
+import '../services/workout_launcher.dart';
 import 'routine_builder_screen.dart';
 
 // Custom Workout Mode: the saved routines (Member C's database).
-// New routine opens the builder. Running a routine comes with the
-// routine runner.
+// New routine opens the builder. Tapping a routine runs it (routine runner
+// in workout_launcher.dart).
 class RoutineListScreen extends StatefulWidget {
   const RoutineListScreen({super.key});
 
@@ -73,33 +74,29 @@ class _RoutineListScreenState extends State<RoutineListScreen> {
           ? const Center(child: CircularProgressIndicator())
           : routines.isEmpty
           ? const Center(
-        child: Text('No routines yet. Tap New routine to build one.'),
-      )
+              child: Text('No routines yet. Tap New routine to build one.'),
+            )
           : ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
-        children: [
-          for (final r in routines)
-            Card(
-              child: ListTile(
-                title: Text(r.name),
-                subtitle: Text(
-                  '${r.items.length} exercises, '
-                      '${r.items.fold(0, (sum, i) => sum + i.sets)} sets',
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: 'Delete',
-                  onPressed: () => _delete(r),
-                ),
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Running routines comes next'),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+              children: [
+                for (final r in routines)
+                  Card(
+                    child: ListTile(
+                      title: Text(r.name),
+                      subtitle: Text(
+                        '${r.items.length} exercises, '
+                        '${r.items.fold(0, (sum, i) => sum + i.sets)} sets',
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: 'Delete',
+                        onPressed: () => _delete(r),
+                      ),
+                      onTap: () => startRoutine(context, r),
+                    ),
                   ),
-                ),
-              ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }

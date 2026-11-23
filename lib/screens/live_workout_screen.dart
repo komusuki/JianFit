@@ -11,6 +11,7 @@ import '../models/workout_view.dart';
 import '../services/database_service.dart';
 import '../services/fatigue.dart';
 import '../services/overload.dart';
+import '../services/workout_launcher.dart';
 import '../services/workout_source.dart';
 import '../widgets/rest_view.dart';
 import 'session_summary_screen.dart';
@@ -27,6 +28,11 @@ import 'session_summary_screen.dart';
 // exerciseWarning (wrong posture or no movement) in the same red banner.
 // Overload (Member C, overload.dart): target + 5 attempts without reaching
 // the target replaces the failed-in-a-row warning in that banner.
+// Routine runner: with a RoutineRun, the last set of an exercise is followed
+// by a rest and the next exercise's setup check; the whole routine saves as
+// one session. Layout (design H): camera with the cue on it, and a panel with
+// the sets, the count, Pause and Stop (beside the camera in landscape, below
+// it in portrait).
 class LiveWorkoutScreen extends StatefulWidget {
   const LiveWorkoutScreen({
     super.key,
@@ -34,6 +40,7 @@ class LiveWorkoutScreen extends StatefulWidget {
     required this.source,
     required this.plan,
     required this.strictness,
+    this.run,
   });
 
   final ExerciseInfo exercise;
@@ -46,6 +53,9 @@ class LiveWorkoutScreen extends StatefulWidget {
   /// Saved with the session (Member C).
   final Strictness strictness;
 
+  /// Set when this exercise is part of a routine (Custom Workout Mode).
+  final RoutineRun? run;
+
   @override
   State<LiveWorkoutScreen> createState() => _LiveWorkoutScreenState();
 }
@@ -54,6 +64,8 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
   StreamSubscription<WorkoutView>? _sub;
   int _setNumber = 1;
   bool _resting = false;
+  bool _betweenExercises = false; // routine: rest before the next exercise
+  bool _handedOver = false; // routine: the next exercise took over
   bool _finished = false;
   final _results = <String>[];
   final _startedAt = DateTime.now();
@@ -79,11 +91,12 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
 
   void _onUpdate(WorkoutView v) {
     // While resting or paused, the counts still belong to the set that ended.
-    if (_resting || _finished || v.paused) return;
+    if (_resting || _betweenExercises || _finished || v.paused) return;
     if (v.attempted > _seenAttempted) {
       _seenAttempted = v.attempted;
       _failedStreak = v.lastRepCorrect == false ? _failedStreak + 1 : 0;
-      final warning = warnTooManyReps(
+      final warning =
+          warnTooManyReps(
             attempted: v.attempted,
             correct: v.correct,
             target: _target,
@@ -100,6 +113,8 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     setState(() {
       if (_setNumber < widget.plan.sets) {
         _resting = true;
+      } else if (widget.run != null && !widget.run!.isLast) {
+        _betweenExercises = true;
       } else {
         _finished = true;
         _saving = _save();
@@ -118,7 +133,10 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
   );
 
   /// Saves the session once. Null when nothing was done or saving failed.
+  /// A routine saves every exercise's sets in one session.
   Future<int?> _save() async {
+    final run = widget.run;
+    if (run != null) return run.save(_sets);
     final done = _sets.any(
       (s) => s.reps.isNotEmpty || (s.holdSeconds ?? 0) >= 1,
     );
@@ -145,7 +163,7 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     if (_leaving) return;
     _leaving = true;
     if (_saving == null) {
-      if (!_resting) {
+      if (!_resting && !_betweenExercises) {
         final stopped = _setRecord(widget.source.current);
         if (stopped.reps.isNotEmpty || (stopped.holdSeconds ?? 0) >= 1) {
           _sets.add(stopped);
@@ -186,71 +204,62 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     widget.source.beginSet();
   }
 
+  /// Routine: this exercise is done, so hand over to the next one's setup.
+  void _nextExercise() {
+    final run = widget.run!;
+    run.sets.addAll(_sets);
+    run.index++;
+    _handedOver = true;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => run.setupScreen()),
+    );
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
     widget.source.stop();
     WakelockPlus.disable();
-    SystemChrome.setPreferredOrientations([]);
+    // The next exercise's setup check has already set its own orientation.
+    if (!_handedOver) SystemChrome.setPreferredOrientations([]);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(
-          '${widget.exercise.name}, set $_setNumber of ${widget.plan.sets}',
-        ),
-      ),
       body: StreamBuilder<WorkoutView>(
         stream: widget.source.updates,
         initialData: widget.source.current,
         builder: (context, snapshot) {
           final v = snapshot.data!;
-          final repColor = v.lastRepCorrect == null
-              ? null
-              : (v.lastRepCorrect! ? Colors.greenAccent : Colors.redAccent);
+          final camera = _camera(v);
+          final panel = SafeArea(
+            left: !landscape,
+            top: landscape,
+            child: landscape
+                ? SingleChildScrollView(child: _panel(context, v))
+                : _panel(context, v),
+          );
           return Stack(
             fit: StackFit.expand,
             children: [
-              Center(child: widget.source.buildPreview()),
-              // Placeholder for red and green joints: a frame in the
-              // latest rep's color.
-              if (repColor != null)
-                IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: repColor, width: 6),
+              landscape
+                  ? Row(
+                      children: [
+                        Expanded(child: camera),
+                        SizedBox(width: 300, child: panel),
+                      ],
+                    )
+                  : Column(
+                      children: [
+                        Expanded(child: camera),
+                        panel,
+                      ],
                     ),
-                  ),
-                ),
-              Positioned(
-                top: 12,
-                left: 12,
-                right: 12,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _Counters(view: v, isHold: _isHold, target: _target),
-                    if (v.cue != null) ...[
-                      const SizedBox(height: 8),
-                      _CueBanner(cue: v.cue!),
-                    ],
-                    if (_warning != null) ...[
-                      const SizedBox(height: 8),
-                      _WarningBanner(text: _warning!),
-                    ],
-                    if (v.exerciseWarning != null) ...[
-                      const SizedBox(height: 8),
-                      _WarningBanner(text: v.exerciseWarning!),
-                    ],
-                  ],
-                ),
-              ),
-              if (v.paused && !_resting && !_finished)
-                _PausedOverlay(personVisible: v.personVisible),
               if (_resting)
                 RestView(
                   key: ValueKey(_setNumber),
@@ -261,37 +270,14 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
                   next: 'Set ${_setNumber + 1} of ${widget.plan.sets}',
                   onDone: _startNextSet,
                 ),
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 24,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.tonalIcon(
-                        icon: Icon(v.paused ? Icons.play_arrow : Icons.pause),
-                        label: Text(v.paused ? 'Resume' : 'Pause'),
-                        onPressed: _resting
-                            ? null
-                            : (v.paused
-                                  ? widget.source.resume
-                                  : widget.source.pause),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
-                        icon: const Icon(Icons.stop),
-                        label: const Text('Stop'),
-                        onPressed: _leave,
-                      ),
-                    ),
-                  ],
+              if (_betweenExercises)
+                RestView(
+                  key: const ValueKey('next exercise'),
+                  seconds: widget.plan.restSec,
+                  lastSet: _results.last,
+                  next: 'Next exercise: ${widget.run!.nextName}',
+                  onDone: _nextExercise,
                 ),
-              ),
               if (_finished)
                 _FinishedOverlay(results: _results, onDone: _leave),
             ],
@@ -300,60 +286,183 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
       ),
     );
   }
+
+  /// The camera with the rep color frame, the cue and warnings on top.
+  Widget _camera(WorkoutView v) {
+    final repColor = v.lastRepCorrect == null
+        ? null
+        : (v.lastRepCorrect! ? Colors.greenAccent : Colors.redAccent);
+    return ColoredBox(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(child: widget.source.buildPreview()),
+          // Placeholder for red and green joints: a frame in the latest
+          // rep's color.
+          if (repColor != null)
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: repColor, width: 6),
+                ),
+              ),
+            ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (v.cue != null) _CueBanner(cue: v.cue!),
+                  if (_warning != null) ...[
+                    const SizedBox(height: 8),
+                    _WarningBanner(text: _warning!),
+                  ],
+                  if (v.exerciseWarning != null) ...[
+                    const SizedBox(height: 8),
+                    _WarningBanner(text: v.exerciseWarning!),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          if (v.paused && !_resting && !_betweenExercises && !_finished)
+            _PausedOverlay(personVisible: v.personVisible),
+        ],
+      ),
+    );
+  }
+
+  /// Exercise name, the sets (last, now, next), the count, Pause and Stop.
+  Widget _panel(BuildContext context, WorkoutView v) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final run = widget.run;
+    final where = run == null
+        ? 'Single exercise'
+        : '${run.routine.name}, exercise ${run.index + 1} of '
+              '${run.routine.items.length}';
+    final now = _isHold
+        ? '${v.holdSeconds.floor()} of $_target s'
+        : '${v.correct} of $_target';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.exercise.name,
+            style: text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          Text(
+            where,
+            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          if (_setNumber > 1)
+            _SetRow(
+              label: 'Set ${_setNumber - 1}',
+              value: _results[_setNumber - 2],
+            ),
+          _SetRow(label: 'Set $_setNumber, now', value: now, current: true),
+          if (_setNumber < widget.plan.sets)
+            _SetRow(
+              label: 'Set ${_setNumber + 1}',
+              value: 'next, after ${widget.plan.restSec} s rest',
+            ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                _isHold ? '${v.holdSeconds.floor()}' : '${v.correct}',
+                style: text.displayMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: scheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _isHold
+                      ? 'seconds held of $_target'
+                      : 'correct, ${v.attempted} attempted',
+                  style: text.titleMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  icon: Icon(v.paused ? Icons.play_arrow : Icons.pause),
+                  label: Text(v.paused ? 'Resume' : 'Pause'),
+                  onPressed: _resting || _betweenExercises
+                      ? null
+                      : (v.paused ? widget.source.resume : widget.source.pause),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: scheme.error,
+                  ),
+                  icon: const Icon(Icons.stop),
+                  label: const Text('Stop'),
+                  onPressed: _leave,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _Counters extends StatelessWidget {
-  const _Counters({
-    required this.view,
-    required this.isHold,
-    required this.target,
+/// One line of the set list; the set in progress is highlighted.
+class _SetRow extends StatelessWidget {
+  const _SetRow({
+    required this.label,
+    required this.value,
+    this.current = false,
   });
 
-  final WorkoutView view;
-  final bool isHold;
-  final int target;
+  final String label;
+  final String value;
+  final bool current;
 
   @override
   Widget build(BuildContext context) {
-    const big = TextStyle(
-      color: Colors.white,
-      fontSize: 36,
-      fontWeight: FontWeight.bold,
+    final scheme = Theme.of(context).colorScheme;
+    final style = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: current ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+      fontWeight: current ? FontWeight.w700 : null,
     );
-    const small = TextStyle(color: Colors.white70);
     return Container(
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: BorderRadius.circular(12),
+        color: current ? scheme.secondaryContainer : null,
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: isHold
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('${view.holdSeconds.floor()} / $target s', style: big),
-                const Text('Hold time', style: small),
-              ],
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('${view.correct} / $target', style: big),
-                    const Text('Correct', style: small),
-                  ],
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('${view.attempted}', style: big),
-                    const Text('Attempted', style: small),
-                  ],
-                ),
-              ],
-            ),
+      child: Row(
+        children: [
+          Text(label, style: style),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(value, style: style, textAlign: TextAlign.end),
+          ),
+        ],
+      ),
     );
   }
 }

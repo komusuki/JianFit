@@ -4,10 +4,8 @@ import '../models/exercise_definition.dart';
 import '../models/exercise_info.dart';
 import '../models/strictness.dart';
 import '../models/workout_records.dart';
-import '../services/engine_workout_source.dart';
-import '../services/fake_workout_source.dart';
-import '../services/replay_workout_source.dart';
 import '../services/settings_service.dart';
+import '../services/workout_launcher.dart';
 import '../services/workout_source.dart';
 import 'setup_check_screen.dart';
 import '../widgets/number_picker.dart';
@@ -37,25 +35,15 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
 
   bool get _isHold => widget.exercise.type == ExerciseType.hold;
 
-  /// Which source drives the workout: Member C's replay mode when the
-  /// developer switch is on, Member A's engine when the exercise has a file,
-  /// otherwise made-up data so every exercise can still be tried.
-  WorkoutSource _makeSource() {
-    final def = widget.definition;
-    if (_replay) {
-      return ReplayWorkoutSource(widget.exercise, strictness: _strictness);
-    }
-    if (def != null) return EngineWorkoutSource(def, _strictness);
-    return FakeWorkoutSource(widget.exercise);
-  }
+  /// Replay mode, the engine or made-up data (workout_launcher.dart).
+  WorkoutSource _makeSource() => makeSource(
+    widget.exercise,
+    widget.definition,
+    _strictness,
+    replay: _replay,
+  );
 
-  /// Portrait for standing exercises, landscape for floor exercises.
-  /// Exercises without a file guess from their placement text.
-  bool get _landscape {
-    final o = widget.definition?.orientation;
-    if (o != null) return o == 'landscape';
-    return widget.exercise.placement.contains('floor');
-  }
+  bool get _landscape => isLandscape(widget.exercise, widget.definition);
 
   @override
   void initState() {
@@ -172,4 +160,3 @@ class _ExerciseDetailScreenState extends State<ExerciseDetailScreen> {
     );
   }
 }
-
