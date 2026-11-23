@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models/app_palette.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
 import 'services/settings_service.dart';
 
 Future<void> main() async {
@@ -20,7 +20,7 @@ class MyApp extends StatelessWidget {
       builder: (context, palette, _) => MaterialApp(
         title: 'JianFit',
         theme: ThemeData(colorScheme: palette.colorScheme),
-        home: const HomeScreen(),
+        home: const MainShell(),
       ),
     );
   }

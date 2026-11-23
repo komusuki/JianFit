@@ -10,6 +10,7 @@ class SettingsService {
   static const _voiceKey = 'voice_on';
   static const _replayKey = 'replay_mode';
   static const _paletteKey = 'palette';
+  static const _lastRoutineKey = 'last_routine_id';
   static final _prefs = SharedPreferencesAsync();
 
   /// The color set in use. main() loads it at startup; the app rebuilds its
@@ -39,6 +40,12 @@ class SettingsService {
 
   static Future<void> saveStrictness(Strictness s) =>
       _prefs.setString(_strictnessKey, s.name);
+
+  /// The routine Today shows: the one started most recently.
+  static Future<int?> loadLastRoutineId() => _prefs.getInt(_lastRoutineKey);
+
+  static Future<void> saveLastRoutineId(int id) =>
+      _prefs.setInt(_lastRoutineKey, id);
 
   static Future<bool> loadVoiceOn() async =>
       await _prefs.getBool(_voiceKey) ?? true;

@@ -1,12 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jianfit/main.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
-  testWidgets('Home screen shows the main options', (tester) async {
+  // The Today tab opens the database; tests use the laptop version of it.
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
+  testWidgets('The app opens on Today with the four tabs', (tester) async {
     await tester.pumpWidget(const MyApp());
-    expect(find.text('JianFit'), findsOneWidget);
-    expect(find.text('Single Exercise'), findsOneWidget);
-    expect(find.text('Custom Workout'), findsOneWidget);
+    await tester.pump();
+    expect(find.text('Today'), findsWidgets);
+    expect(find.text('Exercises'), findsOneWidget);
     expect(find.text('History'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 }

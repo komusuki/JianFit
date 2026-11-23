@@ -7,8 +7,11 @@ import '../models/exercise_info.dart';
 import '../models/strictness.dart';
 import '../models/workout_records.dart';
 import '../models/workout_view.dart';
+import '../services/database_service.dart';
+import '../services/workout_launcher.dart';
 import '../services/workout_source.dart';
 import 'live_workout_screen.dart';
+import 'session_summary_screen.dart';
 
 // Camera setup check (roadmap Part 10): placement instructions, a body
 // outline, and a 3-2-1 countdown once the source says the person is ready.
@@ -20,6 +23,7 @@ class SetupCheckScreen extends StatefulWidget {
     required this.plan,
     required this.strictness,
     required this.landscape,
+    this.run,
   });
 
   final ExerciseInfo exercise;
@@ -34,6 +38,9 @@ class SetupCheckScreen extends StatefulWidget {
   /// Lock the screen to landscape (floor exercises) or portrait.
   final bool landscape;
 
+  /// Set when this exercise is part of a routine (Custom Workout Mode).
+  final RoutineRun? run;
+
   @override
   State<SetupCheckScreen> createState() => _SetupCheckScreenState();
 }
@@ -43,6 +50,7 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
   Timer? _countdownTimer;
   int? _countdown;
   bool _handedOver = false;
+  bool _stopping = false;
 
   @override
   void initState() {
@@ -89,6 +97,29 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
           source: widget.source,
           plan: widget.plan,
           strictness: widget.strictness,
+          run: widget.run,
+        ),
+      ),
+    );
+  }
+
+  /// Back during a routine, after at least one exercise: save the exercises
+  /// already done and show their summary, so they are not lost.
+  Future<void> _stopRoutine() async {
+    if (_stopping) return;
+    _stopping = true;
+    final id = await widget.run!.save(const []);
+    if (!mounted) return;
+    if (id == null) {
+      Navigator.pop(context);
+      return;
+    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SessionSummaryScreen(
+          database: DatabaseService.instance,
+          sessionId: id,
         ),
       ),
     );
@@ -115,71 +146,78 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
   @override
   Widget build(BuildContext context) {
     const white = TextStyle(color: Colors.white);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: Text('Set up: ${widget.exercise.name}')),
-      body: StreamBuilder<WorkoutView>(
-        stream: widget.source.updates,
-        initialData: widget.source.current,
-        builder: (context, snapshot) {
-          final v = snapshot.data!;
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Center(child: widget.source.buildPreview()),
-              Center(
-                child: Icon(
-                  Icons.accessibility_new,
-                  size: 280,
-                  color: (v.ready ? Colors.greenAccent : Colors.white)
-                      .withValues(alpha: 0.5),
-                ),
-              ),
-              if (_countdown != null)
+    final routineDone = widget.run?.sets.isNotEmpty ?? false;
+    return PopScope(
+      canPop: !routineDone,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _stopRoutine();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(title: Text('Set up: ${widget.exercise.name}')),
+        body: StreamBuilder<WorkoutView>(
+          stream: widget.source.updates,
+          initialData: widget.source.current,
+          builder: (context, snapshot) {
+            final v = snapshot.data!;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Center(child: widget.source.buildPreview()),
                 Center(
-                  child: Text(
-                    '$_countdown',
-                    style: const TextStyle(
-                      fontSize: 120,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                  child: Icon(
+                    Icons.accessibility_new,
+                    size: 280,
+                    color: (v.ready ? Colors.greenAccent : Colors.white)
+                        .withValues(alpha: 0.5),
+                  ),
+                ),
+                if (_countdown != null)
+                  Center(
+                    child: Text(
+                      '$_countdown',
+                      style: const TextStyle(
+                        fontSize: 120,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 32,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${widget.exercise.cameraView} view. '
+                          '${widget.exercise.placement}',
+                          style: white,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _status(v),
+                          style: white.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 32,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${widget.exercise.cameraView} view. '
-                        '${widget.exercise.placement}',
-                        style: white,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _status(v),
-                        style: white.copyWith(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
