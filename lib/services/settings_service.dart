@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/app_palette.dart';
 import '../models/strictness.dart';
 
 // Saved app settings (roadmap Part 10: strictness level, voice on or off).
@@ -7,7 +9,25 @@ class SettingsService {
   static const _strictnessKey = 'strictness';
   static const _voiceKey = 'voice_on';
   static const _replayKey = 'replay_mode';
+  static const _paletteKey = 'palette';
   static final _prefs = SharedPreferencesAsync();
+
+  /// The color set in use. main() loads it at startup; the app rebuilds its
+  /// theme whenever it changes.
+  static final palette = ValueNotifier<AppPalette>(AppPalette.greenYellow);
+
+  static Future<AppPalette> loadPalette() async {
+    final name = await _prefs.getString(_paletteKey);
+    return AppPalette.values.firstWhere(
+      (p) => p.name == name,
+      orElse: () => AppPalette.greenYellow,
+    );
+  }
+
+  static Future<void> savePalette(AppPalette p) {
+    palette.value = p;
+    return _prefs.setString(_paletteKey, p.name);
+  }
 
   static Future<Strictness> loadStrictness() async {
     final name = await _prefs.getString(_strictnessKey);

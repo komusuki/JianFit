@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../models/app_palette.dart';
 import '../models/strictness.dart';
 import '../services/settings_service.dart';
 
@@ -88,6 +89,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SettingsService.saveVoiceOn(v);
                   },
                 ),
+                const SizedBox(height: 24),
+                Text('Colors', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                for (final p in AppPalette.values)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: _swatches(p),
+                    title: Text(p.label),
+                    selected: p == SettingsService.palette.value,
+                    trailing: p == SettingsService.palette.value
+                        ? const Icon(Icons.check_circle)
+                        : null,
+                    onTap: () => SettingsService.savePalette(p),
+                  ),
                 // Hidden in release builds: only debug builds show it.
                 if (kDebugMode) ...[
                   const SizedBox(height: 24),
@@ -113,4 +128,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
     );
   }
+
+  // Two dots showing a color set's main and highlight colors.
+  Widget _swatches(AppPalette p) => ExcludeSemantics(
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final c in [p.fill, p.highlight])
+          Container(
+            width: 24,
+            height: 24,
+            margin: const EdgeInsets.only(right: 4),
+            decoration: BoxDecoration(
+              color: c,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.black26),
+            ),
+          ),
+      ],
+    ),
+  );
 }
