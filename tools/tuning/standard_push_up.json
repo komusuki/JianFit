@@ -1,7 +1,30 @@
 {
   "id": "standard_push_up",
-  "note": "Rep limits are a starting guess on elbow_angle (dip: start below 140, complete above 160); check them against the plots. Owner: Member B. Starter file made by Member C, no form checks yet. The owner adds them after looking at the plots and labels (same format as forward_lunge.json; check names must match the mistake labels in the sheet).",
+  "note": "Tuned on S01 (V033 to V035, labels in JianFit_Labels). complete_threshold 155: at 160 the counter merged reps and missed the last rep (count 88.9%, now 96.3%). hips_sag and hips_raised check hip_sag at the deepest frame: correct reps sit at +5 to +6, sagging at +18 to +27, raised at -26 to -36. head_drop and shallow_depth wait for the reshot clips. Owner: Member B.",
   "start_threshold": 140,
-  "complete_threshold": 160,
-  "form_checks": []
+  "complete_threshold": 155,
+  "form_checks": [
+    {
+      "name": "hips_sag",
+      "category": "safety",
+      "measurement": "hip_sag",
+      "when": "bottom",
+      "max": 12,
+      "cue": "Lift your hips. Keep a straight line.",
+      "priority": 1
+    },
+    {
+      "name": "hips_raised",
+      "category": "cleanliness",
+      "measurement": "hip_sag",
+      "when": "bottom",
+      "min": {
+        "beginner": -18,
+        "standard": -14,
+        "strict": -10
+      },
+      "cue": "Lower your hips.",
+      "priority": 2
+    }
+  ]
 }
