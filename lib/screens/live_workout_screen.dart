@@ -10,6 +10,7 @@ import '../models/workout_records.dart';
 import '../models/workout_view.dart';
 import '../services/database_service.dart';
 import '../services/fatigue.dart';
+import '../services/overload.dart';
 import '../services/workout_source.dart';
 import '../widgets/rest_view.dart';
 import 'session_summary_screen.dart';
@@ -24,6 +25,8 @@ import 'session_summary_screen.dart';
 // in a row, and a note on the rest screen when a set falls behind set 1.
 // Exercise check (Member C, exercise_check.dart): the source's
 // exerciseWarning (wrong posture or no movement) in the same red banner.
+// Overload (Member C, overload.dart): target + 5 attempts without reaching
+// the target replaces the failed-in-a-row warning in that banner.
 class LiveWorkoutScreen extends StatefulWidget {
   const LiveWorkoutScreen({
     super.key,
@@ -80,7 +83,12 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     if (v.attempted > _seenAttempted) {
       _seenAttempted = v.attempted;
       _failedStreak = v.lastRepCorrect == false ? _failedStreak + 1 : 0;
-      final warning = warnDuringSet(_failedStreak);
+      final warning = warnTooManyReps(
+            attempted: v.attempted,
+            correct: v.correct,
+            target: _target,
+          ) ??
+          warnDuringSet(_failedStreak);
       if (warning != _warning) setState(() => _warning = warning);
     }
     final reached = _isHold ? v.holdSeconds >= _target : v.correct >= _target;
