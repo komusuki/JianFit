@@ -46,7 +46,12 @@ class ReplayRunner {
     if (countReps && frame.status == FrameStatus.judged) {
       final main = frame.values[exercise.config.mainMeasurement];
       if (main != null) {
-        final rep = counter.update(main, frame.values, input.tMs);
+        final rep = counter.update(
+          main,
+          frame.values,
+          input.tMs,
+          leg: frame.frontLeg, // lunges: same as EngineWorkoutSource
+        );
         if (rep != null) {
           final verdict = judgeRep(rep, exercise.formChecks, strictness);
           reps.add((rep, verdict));
