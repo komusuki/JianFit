@@ -48,3 +48,5 @@ app.*.map.json
 .widget_preview/
 
 live_check.txt
+
+*_log.txt
