@@ -6,7 +6,7 @@
   "type": "hold",
   "camera": {
     "view": "Side",
-    "orientation": "portrait",
+    "orientation": "landscape",
     "placement": "Phone near floor level, about 3 meters away, facing your side."
   },
   "tracking": {
