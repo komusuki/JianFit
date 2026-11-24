@@ -281,6 +281,56 @@ void main() {
     expect(sag.values['hip_sag'], closeTo(18.77 / 2, 0.01));
   });
 
+  test('push-ups: elbow_angle and head_drop', () {
+    const pushUpConfig = ExerciseConfig(
+      id: 'test_push_up',
+      posture: Posture.floor,
+      requiredJoints: [
+        Joint.ear,
+        Joint.shoulder,
+        Joint.elbow,
+        Joint.wrist,
+        Joint.hip,
+        Joint.ankle,
+      ],
+      measurements: ['elbow_angle', 'hip_sag', 'head_drop'],
+      mainMeasurement: 'elbow_angle',
+      direction: Direction.dip,
+      startThreshold: 140,
+      completeThreshold: 155,
+    );
+    Map<int, Pt> pushUpFrame(double wristX, double wristY) {
+      final m = <int, Pt>{};
+      void put(Joint j, double x, double y) {
+        m[landmarkIndex(j, Side.left)] = Pt(x, y, 0.9);
+        m[landmarkIndex(j, Side.right)] = Pt(x, y, 0.6);
+      }
+
+      put(Joint.ear, 250, 290);
+      put(Joint.shoulder, 300, 300);
+      put(Joint.elbow, 300, 380);
+      put(Joint.wrist, wristX, wristY);
+      put(Joint.hip, 500, 312); // on the shoulder-ankle line
+      put(Joint.knee, 650, 320);
+      put(Joint.ankle, 800, 330);
+      return m;
+    }
+
+    final layer = MeasurementLayer(pushUpConfig);
+    for (var t = 0; t <= 1000; t += 100) {
+      layer.process(pushUpFrame(300, 460), t); // arms straight
+    }
+    final top = layer.process(pushUpFrame(300, 460), 1100);
+    expect(top.status, FrameStatus.judged);
+    expect(top.values['elbow_angle'], closeTo(180, 0.01));
+    expect(top.values['hip_sag'], closeTo(0, 0.01));
+    // Ear slightly above the hip-shoulder line: 7.88 degrees (Python: 7.876).
+    expect(top.values['head_drop'], closeTo(7.876, 0.01));
+    // Elbow bent to 90: smoothed over 2 frames, (180 + 90) / 2.
+    final down = layer.process(pushUpFrame(380, 380), 1200);
+    expect(down.values['elbow_angle'], closeTo(135, 0.01));
+  });
+
   test('lunges: front leg with the v0.4 margin, and its measurements', () {
     const lungeConfig = ExerciseConfig(
       id: 'test_lunge_measurements',

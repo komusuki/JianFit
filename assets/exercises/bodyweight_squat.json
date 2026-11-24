@@ -45,7 +45,7 @@
       "category": "cleanliness",
       "measurement": "heel_rise",
       "when": "bottom",
-      "max": {"beginner": 0.035, "standard": 0.03, "strict": 0.025},
+      "max": {"beginner": 0.040, "standard": 0.035, "strict": 0.030},
       "cue": "Keep your heels down.",
       "priority": 4
     }
