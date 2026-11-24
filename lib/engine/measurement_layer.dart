@@ -92,6 +92,13 @@ final Map<String, MeasureFn> measurementRegistry = {
       hipSag(c.p(Joint.shoulder), c.p(Joint.hip), c.p(c.bodyLineEnd)),
   'elbow_under_shoulder': (c) =>
       align(c.p(Joint.elbow), c.p(Joint.shoulder), c.bodyLen, c.facing).abs(),
+  // Push-ups, as tools/measurements.py: the elbow angle (shoulder-elbow-wrist)
+  // and the head line (ear-shoulder-hip). head_drop has no sign, like the
+  // Python tools (head_dropping is not used by any check yet).
+  'elbow_angle': (c) =>
+      jointAngle(c.p(Joint.shoulder), c.p(Joint.elbow), c.p(Joint.wrist)),
+  'head_drop': (c) =>
+      headDrop(c.p(Joint.ear), c.p(Joint.shoulder), c.p(Joint.hip)),
   // Lunges: the front leg's knee angle, the back knee's height above the
   // floor, and how far the front knee is past its ankle.
   'front_knee_angle': (c) {
