@@ -89,3 +89,18 @@ def test_reset_starts_over():
     timer.reset()
     assert timer.seconds == 0
     assert timer.state == NOT_IN_POSITION
+
+
+def test_no_break_while_getting_into_position():
+    timer = make_timer()
+    breaks = feed(timer, SAG, 0, 2000)                # sagging from the first frame in position
+    assert [t for t, _ in breaks] == [1500]           # HOLD_SETTLE_MS, then HOLD_BREAK_MS
+    assert timer.seconds == 0
+
+
+def test_settle_time_starts_again_after_standing_up():
+    timer = make_timer()
+    feed(timer, GOOD, 0, 1500)
+    feed(timer, STANDING, 1600, 1600)
+    breaks = feed(timer, SAG, 1700, 3500)
+    assert [t for t, _ in breaks] == [3200]           # 1700 + 1000 + 500

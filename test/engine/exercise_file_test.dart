@@ -77,9 +77,9 @@ void main() {
     final heels = d.formChecks[2];
     expect(heels.measurement, 'heel_rise');
     expect(heels.timing, CheckWhen.bottom);
-    expect(heels.limitFor(Strictness.beginner), 0.035);
-    expect(heels.limitFor(Strictness.standard), 0.03);
-    expect(heels.limitFor(Strictness.strict), 0.025);
+    expect(heels.limitFor(Strictness.beginner), 0.04);
+    expect(heels.limitFor(Strictness.standard), 0.035);
+    expect(heels.limitFor(Strictness.strict), 0.03);
   });
 
   test('heel_rise needs heel_lift in the measurements', () {

@@ -94,12 +94,35 @@ void main() {
 
   test('strictness changes cleanliness limits only', () {
     final strict = HoldTimer(checks, Strictness.strict);
-    for (var t = 0; t <= 600; t += 100) {
+    for (var t = 0; t <= 1600; t += 100) {
       timer.update(plank(-8), t); // standard: -10 is the limit, passes
-      strict.update(plank(-8), t); // strict: -6, fails
+      strict.update(plank(-8), t); // strict: -6, fails (breaks after settling)
     }
     expect(timer.state, HoldState.holding);
     expect(strict.state, HoldState.broken);
+  });
+
+  test('getting into position: no break during the settle time', () {
+    final broke = <int>[];
+    for (var t = 0; t <= 2000; t += 100) {
+      if (timer.update(plank(20), t) != null) broke.add(t); // sagging from the start
+    }
+    // In position from 0: the failing clock starts at holdSettleMs (1000),
+    // so the hold breaks holdBreakMs later.
+    expect(broke, [1500]);
+    expect(timer.seconds, 0);
+  });
+
+  test('the settle time starts again after standing up', () {
+    for (var t = 0; t <= 1500; t += 100) {
+      timer.update(plank(2), t); // held, so a break is allowed
+    }
+    timer.update({'hip_sag': 0, 'torso_lean': 10}, 1600); // stands up
+    final broke = <int>[];
+    for (var t = 1700; t <= 3500; t += 100) {
+      if (timer.update(plank(20), t) != null) broke.add(t);
+    }
+    expect(broke, [3200]); // in position again at 1700: 1700 + 1000 + 500
   });
 
   test('gaps longer than 500 ms are not counted', () {

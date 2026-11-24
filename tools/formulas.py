@@ -36,6 +36,7 @@ STILL_MAX_MOVE = 0.1          # setup restarts when a required joint moves more 
 # Added in v0.5.1 (engine settings, lib/engine/constants.dart).
 HOLD_BREAK_MS = 500           # holds: a check must fail this long before the hold counts as broken
 HOLD_MIN_LEAN_DEG = 60        # floor holds (plank): in position only while torso_lean is at least this
+HOLD_SETTLE_MS = 1000         # holds: before the first passing frame, no break until in position this long
 
 # ---- Landmark numbers (left, right) from the Landmark map section ----
 EAR = (7, 8)

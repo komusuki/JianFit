@@ -9,9 +9,11 @@ Stages: not in position, holding (timer runs), broken (timer pauses, cue).
   Broken: a check has failed for HOLD_BREAK_MS. update() returns the verdict once per
     break. The timer stops as soon as a check fails, so the grace period only delays the
     cue, never adds time.
+  Getting into position: before the first passing frame, a hold cannot break until the
+    user has been in position for HOLD_SETTLE_MS (v0.5.2).
 """
 from form_judge import judge_rep
-from formulas import HOLD_BREAK_MS, HOLD_MIN_LEAN_DEG, NAN, SMOOTH_RESET_MS
+from formulas import HOLD_BREAK_MS, HOLD_MIN_LEAN_DEG, HOLD_SETTLE_MS, NAN, SMOOTH_RESET_MS
 from rep_counter import RepResult
 
 NOT_IN_POSITION, HOLDING, BROKEN = "notInPosition", "holding", "broken"
@@ -33,6 +35,7 @@ class HoldTimer:
         self.seconds = 0.0                  # seconds held so far in this set
         self._last_pass_ms = None           # the previous frame, if every check passed on it
         self._failing_since_ms = None
+        self._in_position_since_ms = None   # first frame of this stretch in position
 
     def update(self, values, t_ms):
         """Feed one judged frame's smoothed values. Returns the verdict when the hold breaks
@@ -43,7 +46,10 @@ class HoldTimer:
         if lean is not None and lean < HOLD_MIN_LEAN_DEG:
             self.state = NOT_IN_POSITION
             self._failing_since_ms = None
+            self._in_position_since_ms = None
             return None
+        if self._in_position_since_ms is None:
+            self._in_position_since_ms = t_ms
         verdict = judge_values(values, self.checks, self.strictness)
         if verdict.correct:
             # Only time between two passing frames counts.
@@ -52,6 +58,9 @@ class HoldTimer:
             self._last_pass_ms = t_ms
             self.state = HOLDING
             self._failing_since_ms = None
+            return None
+        # Still getting into position: no break yet.
+        if self.state == NOT_IN_POSITION and t_ms - self._in_position_since_ms < HOLD_SETTLE_MS:
             return None
         if self._failing_since_ms is None:
             self._failing_since_ms = t_ms
@@ -66,3 +75,4 @@ class HoldTimer:
         self.seconds = 0.0
         self._last_pass_ms = None
         self._failing_since_ms = None
+        self._in_position_since_ms = None

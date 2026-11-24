@@ -7,6 +7,8 @@
 //   Broken: a check has failed for holdBreakMs. update() returns the verdict
 //     once per break, for the cue manager. The timer stops as soon as a check
 //     fails, so the grace period only delays the cue, never adds time.
+//   Getting into position: before the first passing frame, a hold cannot
+//     break until the user has been in position for holdSettleMs (v0.5.2).
 
 import '../models/exercise_definition.dart';
 import '../models/strictness.dart';
@@ -28,6 +30,7 @@ class HoldTimer {
 
   int? _lastPassMs; // the previous frame, if every check passed on it
   int? _failingSinceMs;
+  int? _inPositionSinceMs; // first frame of this stretch in position
 
   /// Feed one judged frame's smoothed values. Returns the verdict when the
   /// hold breaks (once per break), otherwise null.
@@ -38,8 +41,10 @@ class HoldTimer {
     if (lean != null && lean < holdMinLeanDeg) {
       state = HoldState.notInPosition;
       _failingSinceMs = null;
+      _inPositionSinceMs = null;
       return null;
     }
+    final inSince = _inPositionSinceMs ??= tMs;
     final verdict = judgeValues(values, checks, strictness);
     if (verdict.correct) {
       // Only time between two passing frames counts.
@@ -49,6 +54,10 @@ class HoldTimer {
       _lastPassMs = tMs;
       state = HoldState.holding;
       _failingSinceMs = null;
+      return null;
+    }
+    // Still getting into position: no break yet.
+    if (state == HoldState.notInPosition && tMs - inSince < holdSettleMs) {
       return null;
     }
     final since = _failingSinceMs ??= tMs;
@@ -65,5 +74,6 @@ class HoldTimer {
     seconds = 0;
     _lastPassMs = null;
     _failingSinceMs = null;
+    _inPositionSinceMs = null;
   }
 }
