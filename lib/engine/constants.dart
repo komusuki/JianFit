@@ -44,3 +44,5 @@ const int jumpWaitMs = 400; // JUMP_WAIT_MS
 const int holdBreakMs = 500; // HOLD_BREAK_MS
 // Floor holds (plank): in position only while torso_lean is at least this.
 const double holdMinLeanDeg = 60; // HOLD_MIN_LEAN_DEG
+// Holds: before the first passing frame, no break until in position this long.
+const int holdSettleMs = 1000; // HOLD_SETTLE_MS
