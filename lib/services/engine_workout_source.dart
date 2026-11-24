@@ -249,7 +249,7 @@ class EngineWorkoutSource implements WorkoutSource {
     if (broke != null) {
       final cue = _cues.onRep(broke, tMs);
       _cue = cue.text;
-      if (cue.speak) _speaker.speak(cue.text!);
+      if (cue.speak) _say(cue.text!, tMs);
       final names = broke.failed.map((c) => c.name).join(', ');
       debugPrint(
         'ENGINE hold broken at ${hold.seconds.toStringAsFixed(1)} s ($names)'
