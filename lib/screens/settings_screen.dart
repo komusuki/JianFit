@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_palette.dart';
+import '../models/coach_voice.dart';
 import '../models/strictness.dart';
+import '../services/cue_speaker.dart';
 import '../services/settings_service.dart';
 import 'camera_test_screen.dart';
 
@@ -17,6 +19,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Strictness _strictness = Strictness.standard;
   bool _voiceOn = true;
   bool _replay = false;
+  CoachVoice _coachVoice = CoachVoice.english;
+  String? _englishVoice; // name, or null for the phone default
   bool _loaded = false;
 
   @override
@@ -29,13 +33,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final strictness = await SettingsService.loadStrictness();
     final voiceOn = await SettingsService.loadVoiceOn();
     final replay = await SettingsService.loadReplayMode();
+    final coachVoice = await SettingsService.loadCoachVoice();
+    final englishVoice = await SettingsService.loadEnglishVoice();
     if (!mounted) return;
     setState(() {
       _strictness = strictness;
       _voiceOn = voiceOn;
       _replay = replay;
+      _coachVoice = coachVoice;
+      _englishVoice = englishVoice?.name;
       _loaded = true;
     });
+  }
+
+  Future<void> _pickEnglishVoice() async {
+    final voices = await CueSpeaker.englishVoices();
+    if (!mounted) return;
+    final picked = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('English voice'),
+        children: [
+          if (voices.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('No English voices found on this phone.'),
+            ),
+          for (final v in voices)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, v),
+              child: Text('${v['name']} (${v['locale']})'),
+            ),
+        ],
+      ),
+    );
+    if (picked == null) return;
+    setState(() => _englishVoice = picked['name']);
+    SettingsService.saveEnglishVoice(picked['name']!, picked['locale']!);
   }
 
   @override
@@ -88,6 +122,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (v) {
                     setState(() => _voiceOn = v);
                     SettingsService.saveVoiceOn(v);
+                  },
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Coach voice',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                for (final v in CoachVoice.values)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(v.label),
+                    selected: v == _coachVoice,
+                    trailing: v == _coachVoice
+                        ? const Icon(Icons.check_circle)
+                        : null,
+                    onTap: () {
+                      setState(() => _coachVoice = v);
+                      SettingsService.saveCoachVoice(v);
+                    },
+                  ),
+                if (_coachVoice == CoachVoice.english)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.record_voice_over),
+                    title: const Text('English voice'),
+                    subtitle: Text(_englishVoice ?? 'Phone default'),
+                    onTap: _pickEnglishVoice,
+                  ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.play_arrow),
+                  title: const Text('Test voice'),
+                  subtitle: const Text(
+                    'If the phone has no Mandarin voice, Coach Zhang speaks English',
+                  ),
+                  onTap: () async {
+                    final speaker = CueSpeaker();
+                    await speaker.init();
+                    await speaker.speak('Lower your hips.');
                   },
                 ),
                 const SizedBox(height: 24),
