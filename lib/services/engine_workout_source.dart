@@ -75,7 +75,8 @@ class EngineWorkoutSource implements WorkoutSource {
   int _frames = 0; // processed frames since the last FPS line
   int _cameraFrames = 0; // frames the camera delivered since the last FPS line
 
-  // The latest processed frame, for the skeleton.
+  // The latest processed frame, for the skeleton. Drawn smoothed (see
+  // _smoothForDrawing) so the dots don't shake; display only.
   Pose? _pose;
   InputImageRotation? _rotation;
   Size? _imageSize;
@@ -212,10 +213,10 @@ class EngineWorkoutSource implements WorkoutSource {
       }
     }
 
-    _pose = pose;
     _rotation = _poseService.rotationFor(camera, orientation);
     _imageSize = Size(image.width.toDouble(), image.height.toDouble());
     _personVisible = _layer.hasPerson(points);
+    _pose = pose != null && _personVisible ? _smoothForDrawing(pose) : null;
     _logFps();
     _publish();
   }
@@ -290,6 +291,32 @@ class EngineWorkoutSource implements WorkoutSource {
       HoldState.broken => false,
       HoldState.notInPosition => null,
     };
+  }
+
+  // The drawn skeleton follows each point with an exponential moving average:
+  // drawSmoothing of the newest frame, the rest from the previous drawing.
+  // Display only: counting and judging use the measurement layer's own
+  // smoothing. Starts fresh whenever the person was out of view.
+  static const double drawSmoothing = 0.5;
+
+  Pose _smoothForDrawing(Pose pose) {
+    final previous = _pose;
+    if (previous == null) return pose;
+    const a = drawSmoothing;
+    final smoothed = <PoseLandmarkType, PoseLandmark>{};
+    pose.landmarks.forEach((type, lm) {
+      final p = previous.landmarks[type];
+      smoothed[type] = p == null
+          ? lm
+          : PoseLandmark(
+              type: type,
+              x: a * lm.x + (1 - a) * p.x,
+              y: a * lm.y + (1 - a) * p.y,
+              z: lm.z,
+              likelihood: lm.likelihood,
+            );
+    });
+    return Pose(landmarks: smoothed);
   }
 
   // Speaks a cue and logs how long after the frame arrived it was decided
