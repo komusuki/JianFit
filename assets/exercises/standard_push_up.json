@@ -1,0 +1,44 @@
+{
+  "id": "standard_push_up",
+  "name": "Standard push-up",
+  "pattern": "Push-up",
+  "level": "Intermediate",
+  "type": "reps",
+  "camera": {
+    "view": "Side",
+    "orientation": "landscape",
+    "placement": "Phone near floor level, 2 to 3 meters away, facing your side."
+  },
+  "tracking": {
+    "posture": "floor",
+    "required_joints": ["ear", "shoulder", "elbow", "wrist", "hip", "ankle"],
+    "both_sides_joints": [],
+    "measurements": ["elbow_angle", "hip_sag", "head_drop"],
+    "body_line_end": "ankle",
+    "main_measurement": "elbow_angle",
+    "direction": "dip",
+    "start_threshold": 140,
+    "complete_threshold": 155,
+    "one_sided": false
+  },
+  "form_checks": [
+    {
+      "name": "hips_sag",
+      "category": "safety",
+      "measurement": "hip_sag",
+      "when": "bottom",
+      "max": 12,
+      "cue": "Lift your hips. Keep a straight line.",
+      "priority": 1
+    },
+    {
+      "name": "hips_raised",
+      "category": "cleanliness",
+      "measurement": "hip_sag",
+      "when": "bottom",
+      "min": {"beginner": -18, "standard": -14, "strict": -10},
+      "cue": "Lower your hips.",
+      "priority": 2
+    }
+  ]
+}
