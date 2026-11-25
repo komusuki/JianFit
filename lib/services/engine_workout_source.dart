@@ -59,6 +59,13 @@ class EngineWorkoutSource implements WorkoutSource {
   final _updates = StreamController<WorkoutView>.broadcast();
   WorkoutView _current = const WorkoutView();
 
+  // One engine camera at a time. In a routine, the next exercise's setup
+  // screen starts its source before the previous live screen is disposed,
+  // and the front camera cannot be opened twice (black preview). So each
+  // source waits until the previous one has released the camera (at most 3 s).
+  static Future<void> _cameraFree = Future.value();
+  final _released = Completer<void>();
+
   CameraController? _controller;
   CameraDescription? _camera;
   CameraImage? _pending;
@@ -93,6 +100,13 @@ class EngineWorkoutSource implements WorkoutSource {
 
   @override
   Future<void> start() async {
+    final previous = _cameraFree;
+    _cameraFree = _released.future;
+    await previous.timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => debugPrint('ENGINE: previous camera not released'),
+    );
+    if (_stopped) return;
     _cues.voiceOn = await SettingsService.loadVoiceOn(); // Member B's setting
     await _speaker.init();
     if (!(await Permission.camera.request()).isGranted) {
@@ -410,6 +424,7 @@ class EngineWorkoutSource implements WorkoutSource {
       debugPrint('ENGINE stopImageStream: $e');
     }
     await controller?.dispose();
+    if (!_released.isCompleted) _released.complete(); // camera free for the next
     await _speaker.stop();
     await _poseService.close();
     _clock.stop();
