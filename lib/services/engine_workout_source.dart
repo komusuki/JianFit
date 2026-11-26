@@ -212,6 +212,14 @@ class EngineWorkoutSource implements WorkoutSource {
         );
       }
     }
+    // Not judged (joints hidden, paused, or setting up again): posture only,
+    // so lying down still shows its message (Member C, fix/lying-down-banner).
+    if (frame.status != FrameStatus.judged && _counting && !_manualPause) {
+      _checkMessage = _check.update(
+        lean: torsoLean(points, _layer.side),
+        tMs: tMs,
+      );
+    }
 
     _rotation = _poseService.rotationFor(camera, orientation);
     _imageSize = Size(image.width.toDouble(), image.height.toDouble());

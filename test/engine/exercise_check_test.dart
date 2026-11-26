@@ -4,6 +4,7 @@
 import 'package:test/test.dart';
 import 'package:jianfit/engine/exercise_check.dart';
 import 'package:jianfit/engine/exercise_config.dart';
+import 'package:jianfit/engine/geometry.dart';
 import 'package:jianfit/engine/landmarks.dart';
 
 import 'squat_config.dart';
@@ -90,6 +91,84 @@ void main() {
       feed(check, from: 0, to: 9900, main: (_) => 170);
       check.reset();
       expect(feed(check, from: 10000, to: 15000, main: (_) => 170), isNull);
+    });
+  });
+
+  // fix/lying-down-banner: on the phone, lying down hides the legs, so frames
+  // stop being judged and the sources send posture-only frames (main null),
+  // sometimes with no lean at all.
+  group('frames the engine could not judge', () {
+    test('posture-only frames still show the lying message after 3 s', () {
+      final check = ExerciseCheck(squatConfig);
+      expect(feed(check, from: 0, to: 2900, lean: 85), isNull);
+      expect(feed(check, from: 3000, to: 3000, lean: 85), lyingMessage);
+    });
+
+    test('a frame without a lean keeps the lying timer', () {
+      final check = ExerciseCheck(squatConfig);
+      expect(feed(check, from: 0, to: 1500, lean: 85), isNull);
+      expect(feed(check, from: 1600, to: 2400, lean: double.nan), isNull);
+      expect(feed(check, from: 2500, to: 3000, lean: 85), lyingMessage);
+    });
+
+    test('posture-only frames never give the no-movement message', () {
+      final check = ExerciseCheck(squatConfig);
+      expect(feed(check, from: 0, to: 15000, lean: 10), isNull);
+    });
+
+    test('a plank lean of about 90 never shows a message', () {
+      final check = ExerciseCheck(plankConfig);
+      expect(feed(check, from: 0, to: 6000, lean: 90), isNull);
+      expect(feed(check, from: 6100, to: 8000, lean: double.nan), isNull);
+      expect(feed(check, from: 8100, to: 15000, lean: 88), isNull);
+    });
+  });
+
+  group('torsoLean', () {
+    /// Shoulder and hip on both sides. Upright: shoulder straight above the
+    /// hip (lean 0). Lying: shoulder beside the hip (lean 90).
+    Map<int, Pt> body({
+      bool lying = false,
+      double leftC = 0.9,
+      double rightC = 0.9,
+    }) {
+      final shoulder = lying ? (300.0, 100.0) : (100.0, 100.0);
+      final hip = lying ? (100.0, 100.0) : (100.0, 300.0);
+      return {
+        for (final side in Side.values) ...{
+          landmarkIndex(Joint.shoulder, side): Pt(
+            shoulder.$1,
+            shoulder.$2,
+            side == Side.left ? leftC : rightC,
+          ),
+          landmarkIndex(Joint.hip, side): Pt(
+            hip.$1,
+            hip.$2,
+            side == Side.left ? leftC : rightC,
+          ),
+        },
+      };
+    }
+
+    test('uses the chosen side', () {
+      expect(torsoLean(body(), Side.left), closeTo(0, 0.01));
+      expect(torsoLean(body(lying: true), Side.right), closeTo(90, 0.01));
+    });
+
+    test('uses the other side when the chosen side is hidden', () {
+      expect(
+        torsoLean(body(lying: true, leftC: 0.2), Side.left),
+        closeTo(90, 0.01),
+      );
+    });
+
+    test('after a pause (no side) uses whichever side is visible', () {
+      expect(torsoLean(body(lying: true, leftC: 0.2), null), closeTo(90, 0.01));
+    });
+
+    test('NaN when neither side is visible', () {
+      expect(torsoLean(body(leftC: 0.2, rightC: 0.2), Side.left), isNaN);
+      expect(torsoLean(const {}, null), isNaN);
     });
   });
 }
