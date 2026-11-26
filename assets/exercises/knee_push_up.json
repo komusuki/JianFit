@@ -1,0 +1,53 @@
+{
+  "id": "knee_push_up",
+  "name": "Knee push-up",
+  "pattern": "Push-up",
+  "level": "Beginner",
+  "type": "reps",
+  "camera": {
+    "view": "Side",
+    "orientation": "landscape",
+    "placement": "Phone near floor level, 2 to 3 meters away, facing your side."
+  },
+  "tracking": {
+    "posture": "floor",
+    "required_joints": ["ear", "shoulder", "elbow", "wrist", "hip", "knee"],
+    "both_sides_joints": [],
+    "measurements": ["elbow_angle", "hip_sag", "head_drop"],
+    "body_line_end": "knee",
+    "main_measurement": "elbow_angle",
+    "direction": "dip",
+    "start_threshold": 140,
+    "complete_threshold": 150,
+    "one_sided": false
+  },
+  "form_checks": [
+    {
+      "name": "hips_sag",
+      "category": "safety",
+      "measurement": "hip_sag",
+      "when": "bottom",
+      "max": 4,
+      "cue": "Lift your hips. Keep a straight line.",
+      "priority": 1
+    },
+    {
+      "name": "shallow_depth",
+      "category": "range",
+      "measurement": "elbow_angle",
+      "when": "bottom",
+      "max": 90,
+      "cue": "Go lower.",
+      "priority": 2
+    },
+    {
+      "name": "hips_raised",
+      "category": "cleanliness",
+      "measurement": "hip_sag",
+      "when": "bottom",
+      "min": {"beginner": -40, "standard": -30, "strict": -20},
+      "cue": "Lower your hips.",
+      "priority": 3
+    }
+  ]
+}
