@@ -158,6 +158,12 @@ class ReplayWorkoutSource implements WorkoutSource {
           tMs: f.tMs,
           repDone: rep != null,
         );
+      } else if (_counting && !_manualPause) {
+        // Not judged: posture only, the same as EngineWorkoutSource.
+        _checkMessage = _check?.update(
+          lean: torsoLean(f.points, runner.layer.side),
+          tMs: f.tMs,
+        );
       }
       // Setup just finished: wait here until the countdown ends.
       if (!_counting && runner.layer.isReady) {
