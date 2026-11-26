@@ -34,6 +34,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // R8 shrinking stripped WorkManager's database class, so release
+            // builds crashed at launch. Turned off for the pilot builds.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
