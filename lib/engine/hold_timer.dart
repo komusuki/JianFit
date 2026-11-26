@@ -9,6 +9,9 @@
 //     fails, so the grace period only delays the cue, never adds time.
 //   Getting into position: before the first passing frame, a hold cannot
 //     break until the user has been in position for holdSettleMs (v0.5.2).
+//   After a break: the next break needs good form held for holdRecoverMs
+//     first, so values flickering around a limit give one cue, not one every
+//     second (v0.5.3). The timer still counts every passing frame.
 
 import '../models/exercise_definition.dart';
 import '../models/strictness.dart';
@@ -31,6 +34,8 @@ class HoldTimer {
   int? _lastPassMs; // the previous frame, if every check passed on it
   int? _failingSinceMs;
   int? _inPositionSinceMs; // first frame of this stretch in position
+  int? _passingSinceMs; // first frame of the current run of passing frames
+  bool _armed = true; // false after a break until form holds holdRecoverMs
 
   /// Feed one judged frame's smoothed values. Returns the verdict when the
   /// hold breaks (once per break), otherwise null.
@@ -42,6 +47,8 @@ class HoldTimer {
       state = HoldState.notInPosition;
       _failingSinceMs = null;
       _inPositionSinceMs = null;
+      _passingSinceMs = null;
+      _armed = true;
       return null;
     }
     final inSince = _inPositionSinceMs ??= tMs;
@@ -54,15 +61,21 @@ class HoldTimer {
       _lastPassMs = tMs;
       state = HoldState.holding;
       _failingSinceMs = null;
+      final passingSince = _passingSinceMs ??= tMs;
+      if (!_armed && tMs - passingSince >= holdRecoverMs) _armed = true;
       return null;
     }
+    _passingSinceMs = null;
     // Still getting into position: no break yet.
     if (state == HoldState.notInPosition && tMs - inSince < holdSettleMs) {
       return null;
     }
+    // Not long enough back in good form since the last break: no new break.
+    if (!_armed) return null;
     final since = _failingSinceMs ??= tMs;
     if (state != HoldState.broken && tMs - since >= holdBreakMs) {
       state = HoldState.broken;
+      _armed = false;
       return verdict;
     }
     return null;
@@ -75,5 +88,7 @@ class HoldTimer {
     _lastPassMs = null;
     _failingSinceMs = null;
     _inPositionSinceMs = null;
+    _passingSinceMs = null;
+    _armed = true;
   }
 }

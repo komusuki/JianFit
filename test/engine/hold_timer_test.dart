@@ -125,6 +125,37 @@ void main() {
     expect(broke, [3200]); // in position again at 1700: 1700 + 1000 + 500
   });
 
+  test('after a break, flickering back for under 1 s gives no new break', () {
+    final broke = <int>[];
+    for (var t = 0; t <= 200; t += 100) {
+      timer.update(plank(2), t);
+    }
+    for (var t = 300; t <= 4000; t += 100) {
+      // 600 ms sagging, 400 ms good, over and over (values around a limit).
+      final sag = (t - 300) % 1000 < 600;
+      if (timer.update(plank(sag ? 20 : 2), t) != null) broke.add(t);
+    }
+    expect(broke, [800]); // one cue for the whole stretch
+    expect(timer.seconds, greaterThan(1.0)); // good frames still count
+  });
+
+  test('after a break, 1 s of good form allows the next break', () {
+    final broke = <int>[];
+    for (var t = 0; t <= 200; t += 100) {
+      timer.update(plank(2), t);
+    }
+    for (var t = 300; t <= 900; t += 100) {
+      if (timer.update(plank(20), t) != null) broke.add(t); // breaks at 800
+    }
+    for (var t = 1000; t <= 2100; t += 100) {
+      timer.update(plank(2), t); // good from 1000: armed again at 2000
+    }
+    for (var t = 2200; t <= 2800; t += 100) {
+      if (timer.update(plank(20), t) != null) broke.add(t);
+    }
+    expect(broke, [800, 2700]);
+  });
+
   test('gaps longer than 500 ms are not counted', () {
     timer.update(plank(2), 0);
     timer.update(plank(2), 100);
