@@ -298,11 +298,14 @@ class EngineWorkoutSource implements WorkoutSource {
   // Display only: counting and judging use the measurement layer's own
   // smoothing. Starts fresh whenever the person was out of view.
   static const double drawSmoothing = 0.5;
+  // Holds (plank) barely move, so their skeleton is smoothed more: the
+  // forearms flat on the floor make ML Kit's arm points jump most.
+  static const double holdDrawSmoothing = 0.25;
 
   Pose _smoothForDrawing(Pose pose) {
     final previous = _pose;
     if (previous == null) return pose;
-    const a = drawSmoothing;
+    final a = _hold != null ? holdDrawSmoothing : drawSmoothing;
     final smoothed = <PoseLandmarkType, PoseLandmark>{};
     pose.landmarks.forEach((type, lm) {
       final p = previous.landmarks[type];

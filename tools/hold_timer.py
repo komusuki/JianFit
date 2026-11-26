@@ -11,9 +11,13 @@ Stages: not in position, holding (timer runs), broken (timer pauses, cue).
     cue, never adds time.
   Getting into position: before the first passing frame, a hold cannot break until the
     user has been in position for HOLD_SETTLE_MS (v0.5.2).
+  After a break: the next break needs good form held for HOLD_RECOVER_MS first, so values
+    flickering around a limit give one cue, not one every second (v0.5.3). The timer still
+    counts every passing frame.
 """
 from form_judge import judge_rep
-from formulas import HOLD_BREAK_MS, HOLD_MIN_LEAN_DEG, HOLD_SETTLE_MS, NAN, SMOOTH_RESET_MS
+from formulas import (HOLD_BREAK_MS, HOLD_MIN_LEAN_DEG, HOLD_RECOVER_MS, HOLD_SETTLE_MS, NAN,
+                      SMOOTH_RESET_MS)
 from rep_counter import RepResult
 
 NOT_IN_POSITION, HOLDING, BROKEN = "notInPosition", "holding", "broken"
@@ -36,6 +40,8 @@ class HoldTimer:
         self._last_pass_ms = None           # the previous frame, if every check passed on it
         self._failing_since_ms = None
         self._in_position_since_ms = None   # first frame of this stretch in position
+        self._passing_since_ms = None       # first frame of the current run of passing frames
+        self._armed = True                  # False after a break until form holds HOLD_RECOVER_MS
 
     def update(self, values, t_ms):
         """Feed one judged frame's smoothed values. Returns the verdict when the hold breaks
@@ -47,6 +53,8 @@ class HoldTimer:
             self.state = NOT_IN_POSITION
             self._failing_since_ms = None
             self._in_position_since_ms = None
+            self._passing_since_ms = None
+            self._armed = True
             return None
         if self._in_position_since_ms is None:
             self._in_position_since_ms = t_ms
@@ -58,14 +66,23 @@ class HoldTimer:
             self._last_pass_ms = t_ms
             self.state = HOLDING
             self._failing_since_ms = None
+            if self._passing_since_ms is None:
+                self._passing_since_ms = t_ms
+            if not self._armed and t_ms - self._passing_since_ms >= HOLD_RECOVER_MS:
+                self._armed = True
             return None
+        self._passing_since_ms = None
         # Still getting into position: no break yet.
         if self.state == NOT_IN_POSITION and t_ms - self._in_position_since_ms < HOLD_SETTLE_MS:
+            return None
+        # Not long enough back in good form since the last break: no new break.
+        if not self._armed:
             return None
         if self._failing_since_ms is None:
             self._failing_since_ms = t_ms
         if self.state != BROKEN and t_ms - self._failing_since_ms >= HOLD_BREAK_MS:
             self.state = BROKEN
+            self._armed = False
             return verdict
         return None
 
@@ -76,3 +93,5 @@ class HoldTimer:
         self._last_pass_ms = None
         self._failing_since_ms = None
         self._in_position_since_ms = None
+        self._passing_since_ms = None
+        self._armed = True

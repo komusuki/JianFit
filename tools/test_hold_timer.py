@@ -70,10 +70,10 @@ def test_a_new_break_after_holding_again():
     timer = make_timer()
     feed(timer, GOOD, 0, 500)
     first = feed(timer, SAG, 600, 1200)
-    feed(timer, GOOD, 1300, 2000)
-    second = feed(timer, SAG, 2100, 2700)
-    assert [t for t, _ in first + second] == [1100, 2600]
-    assert timer.seconds == pytest.approx(1.2)
+    feed(timer, GOOD, 1300, 2400)                     # good for HOLD_RECOVER_MS: armed again
+    second = feed(timer, SAG, 2500, 3100)
+    assert [t for t, _ in first + second] == [1100, 3000]
+    assert timer.seconds == pytest.approx(1.6)
 
 
 def test_a_gap_longer_than_smooth_reset_adds_nothing():
@@ -104,3 +104,14 @@ def test_settle_time_starts_again_after_standing_up():
     feed(timer, STANDING, 1600, 1600)
     breaks = feed(timer, SAG, 1700, 3500)
     assert [t for t, _ in breaks] == [3200]           # 1700 + 1000 + 500
+
+
+def test_flickering_after_a_break_gives_one_cue():
+    timer = make_timer()
+    feed(timer, GOOD, 0, 200)
+    breaks = []
+    for start in range(300, 4000, 1000):              # 600 ms sagging, 400 ms good, repeated
+        breaks += feed(timer, SAG, start, start + 500)
+        feed(timer, GOOD, start + 600, start + 900)
+    assert [t for t, _ in breaks] == [800]            # one break: never back in form for 1 s
+    assert timer.seconds > 1.0                        # good frames still count
