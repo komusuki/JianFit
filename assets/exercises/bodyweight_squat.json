@@ -39,15 +39,6 @@
       "max": {"beginner": 55, "standard": 50, "strict": 45},
       "cue": "Keep your chest up.",
       "priority": 3
-    },
-    {
-      "name": "heels_down",
-      "category": "cleanliness",
-      "measurement": "heel_rise",
-      "when": "bottom",
-      "max": {"beginner": 0.040, "standard": 0.035, "strict": 0.030},
-      "cue": "Keep your heels down.",
-      "priority": 4
     }
   ]
 }

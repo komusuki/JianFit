@@ -55,12 +55,10 @@ void main() {
     expect(d.info.cameraView, 'Side');
     expect(d.orientation, 'portrait');
     expect(d.oneSided, isFalse);
-    // heels_down back Nov 17 on heel_rise (formula v0.6), provisional.
-    expect(d.formChecks.map((c) => c.name), [
-      'shallow_depth',
-      'forward_lean',
-      'heels_down',
-    ]);
+    // heels_down removed Nov 26 for the pilot: on a second person ML Kit's
+    // heel point moved by -0.3 to +1.3 body lengths, far more than a real
+    // heel raise, so good squats failed it. heel_lift is still logged.
+    expect(d.formChecks.map((c) => c.name), ['shallow_depth', 'forward_lean']);
 
     final depth = d.formChecks[0];
     expect(depth.category, CheckCategory.range);
@@ -74,16 +72,19 @@ void main() {
     expect(lean.limitFor(Strictness.standard), 50);
     expect(lean.limitFor(Strictness.strict), 45);
 
-    final heels = d.formChecks[2];
-    expect(heels.measurement, 'heel_rise');
-    expect(heels.timing, CheckWhen.bottom);
-    expect(heels.limitFor(Strictness.beginner), 0.04);
-    expect(heels.limitFor(Strictness.standard), 0.035);
-    expect(heels.limitFor(Strictness.strict), 0.03);
   });
 
   test('heel_rise needs heel_lift in the measurements', () {
     final j = squatJson();
+    (j['form_checks'] as List).add({
+      'name': 'heels_down',
+      'category': 'cleanliness',
+      'measurement': 'heel_rise',
+      'when': 'bottom',
+      'max': {'beginner': 0.04, 'standard': 0.035, 'strict': 0.03},
+      'cue': 'Keep your heels down.',
+      'priority': 4,
+    });
     (j['tracking']['measurements'] as List).remove('heel_lift');
     expect(
       problemsIn(j, 'bodyweight_squat.json').join('\n'),
