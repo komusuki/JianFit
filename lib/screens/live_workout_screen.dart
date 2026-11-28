@@ -216,6 +216,20 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
     );
   }
 
+  /// Routine: skip the rest of this exercise (pilot request, Day 20). Keeps
+  /// its finished sets and the reps of the set in progress, then moves on.
+  /// Only offered when another exercise follows; Stop ends the last one.
+  void _skipExercise() {
+    if (_leaving || _handedOver) return;
+    if (!_resting) {
+      final stopped = _setRecord(widget.source.current);
+      if (stopped.reps.isNotEmpty || (stopped.holdSeconds ?? 0) >= 1) {
+        _sets.add(stopped);
+      }
+    }
+    _nextExercise();
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
@@ -422,6 +436,12 @@ class _LiveWorkoutScreenState extends State<LiveWorkoutScreen> {
               ),
             ],
           ),
+          if (run != null && !run.isLast)
+            TextButton.icon(
+              icon: const Icon(Icons.skip_next),
+              label: Text('Skip to ${run.nextName}'),
+              onPressed: _betweenExercises ? null : _skipExercise,
+            ),
         ],
       ),
     );
