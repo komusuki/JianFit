@@ -51,6 +51,7 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
   int? _countdown;
   bool _handedOver = false;
   bool _stopping = false;
+  bool _skipped = false; // routine: moved on to the next exercise's setup
 
   @override
   void initState() {
@@ -125,6 +126,24 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
     );
   }
 
+  /// Routine: skip this exercise (pilot request, Day 20). Goes to the next
+  /// exercise's setup, or ends the routine like Back on the last one.
+  void _skip() {
+    if (_handedOver || _skipped || _stopping) return;
+    final run = widget.run!;
+    _countdownTimer?.cancel();
+    if (run.isLast) {
+      _stopRoutine();
+      return;
+    }
+    _skipped = true;
+    run.index++;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => run.setupScreen()),
+    );
+  }
+
   String _status(WorkoutView v) {
     if (_countdown != null) return 'Hold still...';
     if (v.ready) return 'Good. Get ready.';
@@ -138,7 +157,8 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
     _sub?.cancel();
     if (!_handedOver) {
       widget.source.stop();
-      SystemChrome.setPreferredOrientations([]);
+      // After a skip, the next setup check has already set its orientation.
+      if (!_skipped) SystemChrome.setPreferredOrientations([]);
     }
     super.dispose();
   }
@@ -154,7 +174,13 @@ class _SetupCheckScreenState extends State<SetupCheckScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(title: Text('Set up: ${widget.exercise.name}')),
+        appBar: AppBar(
+          title: Text('Set up: ${widget.exercise.name}'),
+          actions: [
+            if (widget.run != null)
+              TextButton(onPressed: _skip, child: const Text('Skip')),
+          ],
+        ),
         body: StreamBuilder<WorkoutView>(
           stream: widget.source.updates,
           initialData: widget.source.current,

@@ -37,6 +37,14 @@ class _RoutineListScreenState extends State<RoutineListScreen> {
     if (saved == true) _load();
   }
 
+  Future<void> _edit(Routine r) async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => RoutineBuilderScreen(routine: r)),
+    );
+    if (saved == true) _load();
+  }
+
   Future<void> _delete(Routine r) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -87,10 +95,20 @@ class _RoutineListScreenState extends State<RoutineListScreen> {
                         '${r.items.length} exercises, '
                         '${r.items.fold(0, (sum, i) => sum + i.sets)} sets',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: 'Delete',
-                        onPressed: () => _delete(r),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Edit',
+                            onPressed: () => _edit(r),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Delete',
+                            onPressed: () => _delete(r),
+                          ),
+                        ],
                       ),
                       onTap: () => startRoutine(context, r),
                     ),

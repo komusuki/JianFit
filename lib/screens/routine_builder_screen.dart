@@ -8,9 +8,13 @@ import '../widgets/number_picker.dart';
 
 // Routine builder (roadmap Part 11): a name, then exercises in order, each
 // with reps or seconds, sets and rest. Long-press and drag to reorder.
-// Saves with Member C's DatabaseService.saveRoutine().
+// Saves with Member C's DatabaseService.saveRoutine(), or updateRoutine()
+// when editing a saved routine (pilot request, Day 20).
 class RoutineBuilderScreen extends StatefulWidget {
-  const RoutineBuilderScreen({super.key});
+  const RoutineBuilderScreen({super.key, this.routine});
+
+  /// The saved routine to edit, or null for a new one.
+  final Routine? routine;
 
   @override
   State<RoutineBuilderScreen> createState() => _RoutineBuilderScreenState();
@@ -27,6 +31,11 @@ class _RoutineBuilderScreenState extends State<RoutineBuilderScreen> {
   @override
   void initState() {
     super.initState();
+    final routine = widget.routine;
+    if (routine != null) {
+      _name.text = routine.name;
+      _items.addAll(routine.items);
+    }
     _name.addListener(() => setState(() {}));
     // Exercise files override the fake data and add new exercises.
     ExerciseLoader.loadAll().then((r) {
@@ -163,9 +172,18 @@ class _RoutineBuilderScreenState extends State<RoutineBuilderScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await DatabaseService.instance.saveRoutine(
-        Routine(name: _name.text.trim(), items: List.of(_items)),
-      );
+      final name = _name.text.trim();
+      final items = List.of(_items);
+      final id = widget.routine?.id;
+      if (id == null) {
+        await DatabaseService.instance.saveRoutine(
+          Routine(name: name, items: items),
+        );
+      } else {
+        await DatabaseService.instance.updateRoutine(
+          Routine(id: id, name: name, items: items),
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -180,7 +198,7 @@ class _RoutineBuilderScreenState extends State<RoutineBuilderScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New routine'),
+        title: Text(widget.routine == null ? 'New routine' : 'Edit routine'),
         actions: [
           TextButton(
             onPressed: _canSave ? _save : null,

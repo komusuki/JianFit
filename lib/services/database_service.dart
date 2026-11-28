@@ -254,20 +254,48 @@ class DatabaseService {
         'name': routine.name,
         'created_at': DateTime.now().millisecondsSinceEpoch,
       });
-      for (var i = 0; i < routine.items.length; i++) {
-        final item = routine.items[i];
-        await txn.insert('routine_items', {
-          'routine_id': id,
-          'position': i,
-          'exercise_id': item.exerciseId,
-          'target_reps': item.targetReps,
-          'target_seconds': item.targetSeconds,
-          'sets': item.sets,
-          'rest_sec': item.restSec,
-        });
-      }
+      await _insertItems(txn, id, routine.items);
       return id;
     });
+  }
+
+  /// Replaces a saved routine's name and items, keeping its id, so past
+  /// sessions stay linked to it (Edit routine, pilot request, Day 20).
+  Future<void> updateRoutine(Routine routine) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update(
+        'routines',
+        {'name': routine.name},
+        where: 'id = ?',
+        whereArgs: [routine.id],
+      );
+      await txn.delete(
+        'routine_items',
+        where: 'routine_id = ?',
+        whereArgs: [routine.id],
+      );
+      await _insertItems(txn, routine.id!, routine.items);
+    });
+  }
+
+  Future<void> _insertItems(
+    DatabaseExecutor txn,
+    int routineId,
+    List<RoutineItem> items,
+  ) async {
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      await txn.insert('routine_items', {
+        'routine_id': routineId,
+        'position': i,
+        'exercise_id': item.exerciseId,
+        'target_reps': item.targetReps,
+        'target_seconds': item.targetSeconds,
+        'sets': item.sets,
+        'rest_sec': item.restSec,
+      });
+    }
   }
 
   /// Every routine with its items in order, newest routine first.

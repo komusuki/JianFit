@@ -1,5 +1,6 @@
 // History screen (roadmap Part 12). Owner: Member C.
-// Every saved session, newest first. Tapping one opens its summary.
+// Every saved session, newest first. Tapping one opens its summary; the
+// bin button deletes one after asking (pilot request, Day 20).
 // Member B connects the Home screen's History card to this screen.
 
 import 'package:flutter/material.dart';
@@ -18,8 +19,33 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  late final Future<List<SessionListItem>> _sessions = widget.database
+  late Future<List<SessionListItem>> _sessions = widget.database
       .listSessions();
+
+  Future<void> _delete(SessionListItem s) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete this workout?'),
+        content: Text(
+          '${_title(s)}, ${_when(s.startedAt)}. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.database.deleteSession(s.id);
+    if (mounted) setState(() => _sessions = widget.database.listSessions());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +71,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
               ),
             ),
+            onDelete: _delete,
           );
         },
       ),
@@ -55,10 +82,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
 /// The list itself, without the loading. Separate so tests can show it
 /// directly.
 class HistoryView extends StatelessWidget {
-  const HistoryView({super.key, required this.sessions, this.onOpen});
+  const HistoryView({
+    super.key,
+    required this.sessions,
+    this.onOpen,
+    this.onDelete,
+  });
 
   final List<SessionListItem> sessions;
   final ValueChanged<SessionListItem>? onOpen;
+  final ValueChanged<SessionListItem>? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +117,13 @@ class HistoryView extends StatelessWidget {
                 '${_when(s.startedAt)}\n${_result(s)}, ${_cap(s.strictness)}',
               ),
               isThreeLine: true,
-              trailing: const Icon(Icons.chevron_right),
+              trailing: onDelete == null
+                  ? const Icon(Icons.chevron_right)
+                  : IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Delete',
+                      onPressed: () => onDelete!(s),
+                    ),
               onTap: onOpen == null ? null : () => onOpen!(s),
             ),
           ),
