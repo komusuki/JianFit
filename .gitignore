@@ -50,3 +50,4 @@ app.*.map.json
 live_check.txt
 
 *_log.txt
+*.apk
