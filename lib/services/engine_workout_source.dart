@@ -309,11 +309,18 @@ class EngineWorkoutSource implements WorkoutSource {
   // Holds (plank) barely move, so their skeleton is smoothed more: the
   // forearms flat on the floor make ML Kit's arm points jump most.
   static const double holdDrawSmoothing = 0.25;
+  // Lunges: in the side view the far leg is half hidden, so its points jump
+  // (pilot, Day 20). Smoothed more than other rep exercises, less than holds.
+  static const double lungeDrawSmoothing = 0.3;
 
   Pose _smoothForDrawing(Pose pose) {
     final previous = _pose;
     if (previous == null) return pose;
-    final a = _hold != null ? holdDrawSmoothing : drawSmoothing;
+    final a = _hold != null
+        ? holdDrawSmoothing
+        : exercise.info.pattern == 'Lunge'
+        ? lungeDrawSmoothing
+        : drawSmoothing;
     final smoothed = <PoseLandmarkType, PoseLandmark>{};
     pose.landmarks.forEach((type, lm) {
       final p = previous.landmarks[type];
