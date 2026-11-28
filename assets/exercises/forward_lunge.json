@@ -26,7 +26,7 @@
       "category": "safety",
       "measurement": "front_knee_over_ankle",
       "when": "bottom",
-      "max": 0.37,
+      "max": 0.42,
       "cue": "Keep your front knee over your ankle.",
       "priority": 1
     },
